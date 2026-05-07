@@ -835,7 +835,11 @@ var FeishuService = class {
         throw new Error(`Failed to list docs: ${data.msg}`);
       }
       for (const doc of data.data.items || []) {
-        docs.push(doc.document_id);
+        docs.push({
+          docId: doc.document_id,
+          title: doc.title || "Untitled",
+          updatedTime: doc.updated_time || 0
+        });
       }
       hasMore = data.data.has_more;
       pageToken = data.data.page_token || "";
@@ -854,7 +858,8 @@ var FeishuService = class {
     }
     return {
       title: data.data.title || "Untitled",
-      content: await this.getDocumentBlocks(docId, token)
+      content: await this.getDocumentBlocks(docId, token),
+      updatedTime: data.data.updated_time || 0
     };
   }
   async getDocumentBlocks(docId, token) {
@@ -882,25 +887,37 @@ var FeishuService = class {
   blockToMarkdown(block) {
     const type = block.block_type;
     const content = block.text_elements?.map((e) => e.text_run?.content || "").join("") || "";
+    if (type === 21) {
+      const lang = block.properties?.language || "";
+      return `\`\`\`${lang}
+${content}
+\`\`\``;
+    }
     switch (type) {
       case 1:
         return content;
       case 2:
-        return `## ${content}`;
+        return `# ${content}`;
       case 3:
-        return `### ${content}`;
+        return `## ${content}`;
       case 4:
-        return `#### ${content}`;
+        return `### ${content}`;
       case 13:
         return `- ${content}`;
       case 14:
         return `1. ${content}`;
       case 15:
         return `> ${content}`;
-      case 21:
-        return `\`\`\`
-${content}
-\`\`\``;
+      case 17:
+        return `**${content}**`;
+      case 18:
+        return `*${content}*`;
+      case 19:
+        return `~~${content}~~`;
+      case 20:
+        return `\`${content}\``;
+      case 22:
+        return `| ${content} |`;
       default:
         return content;
     }
@@ -923,60 +940,90 @@ ${content}
       throw new Error(`Failed to create doc: ${data.msg}`);
     }
     const docId = data.data.document.document_id;
-    await this.writeContent(docId, content);
+    if (content.trim()) {
+      await this.writeContent(docId, content);
+    }
     return docId;
   }
-  async updateDocument(docId, content) {
+  async updateDocument(docId, content, title) {
     const token = await this.getAccessToken();
-    const blocks = await this.getDocumentBlocks(docId, token);
-    const response = await fetch(
-      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks`,
-      {
-        method: "GET",
-        headers: { "Authorization": `Bearer ${token}` }
+    const docInfo = await this.getDocument(docId);
+    const rootBlockId = await this.getRootBlockId(docId, token);
+    if (!rootBlockId) {
+      throw new Error("Could not find root block");
+    }
+    const blocksResp = await fetch(
+      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks?page_size=500`,
+      { headers: { "Authorization": `Bearer ${token}` } }
+    );
+    const blocksData = await blocksResp.json();
+    if (blocksData.code === 0 && blocksData.data.items?.length > 0) {
+      const blockIds = blocksData.data.items.filter((b2) => b2.block_id !== rootBlockId).map((b2) => b2.block_id);
+      if (blockIds.length > 0) {
+        await this.batchDeleteBlocks(docId, blockIds, token);
       }
+    }
+    if (content.trim()) {
+      await this.appendContent(docId, rootBlockId, content, token);
+    }
+    if (title && title !== docInfo.title) {
+      await this.updateDocumentTitle(docId, title, token);
+    }
+  }
+  async getRootBlockId(docId, token) {
+    const response = await fetch(
+      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks?page_size=50`,
+      { headers: { "Authorization": `Bearer ${token}` } }
     );
     const data = await response.json();
-    if (data.code !== 0) {
-      throw new Error(`Failed to get blocks: ${data.msg}`);
+    if (data.code === 0 && data.data.items?.length > 0) {
+      return data.data.items[0].block_id;
     }
-    for (const block of data.data.items || []) {
-      await this.deleteBlock(docId, block.block_id, token);
+    return null;
+  }
+  async batchDeleteBlocks(docId, blockIds, token) {
+    const batchSize = 50;
+    for (let i2 = 0; i2 < blockIds.length; i2 += batchSize) {
+      const batch = blockIds.slice(i2, i2 + batchSize);
+      await fetch(
+        `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks/batch_delete`,
+        {
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ block_ids: batch })
+        }
+      );
     }
-    await this.writeContent(docId, content);
+  }
+  async updateDocumentTitle(docId, title, token) {
+    await fetch(
+      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ title })
+      }
+    );
   }
   async writeContent(docId, content) {
     const token = await this.getAccessToken();
+    const rootBlockId = await this.getRootBlockId(docId, token);
+    if (rootBlockId) {
+      await this.appendContent(docId, rootBlockId, content, token);
+    }
+  }
+  async appendContent(docId, afterBlockId, content, token) {
     const blocks = this.markdownToBlocks(content);
-    for (const block of blocks) {
-      await this.insertBlockAfter(docId, "", block, token);
-    }
-  }
-  markdownToBlocks(content) {
-    const lines = content.split("\n");
-    const blocks = [];
-    for (const line of lines) {
-      if (line.startsWith("### ")) {
-        blocks.push({ block_type: 4, text_elements: [{ text_run: { content: line.slice(4) } }] });
-      } else if (line.startsWith("## ")) {
-        blocks.push({ block_type: 3, text_elements: [{ text_run: { content: line.slice(3) } }] });
-      } else if (line.startsWith("# ")) {
-        blocks.push({ block_type: 2, text_elements: [{ text_run: { content: line.slice(2) } }] });
-      } else if (line.startsWith("- ")) {
-        blocks.push({ block_type: 13, text_elements: [{ text_run: { content: line.slice(2) } }] });
-      } else if (line.startsWith("> ")) {
-        blocks.push({ block_type: 15, text_elements: [{ text_run: { content: line.slice(2) } }] });
-      } else if (line.startsWith("```")) {
-        blocks.push({ block_type: 21, text_elements: [{ text_run: { content: line.slice(3) } }] });
-      } else if (line.trim()) {
-        blocks.push({ block_type: 1, text_elements: [{ text_run: { content: line } }] });
-      }
-    }
-    return blocks;
-  }
-  async insertBlockAfter(docId, afterBlockId, block, token) {
+    if (blocks.length === 0)
+      return;
     const response = await fetch(
-      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks/${afterBlockId || "insert"}/children`,
+      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks/${afterBlockId}/children`,
       {
         method: "POST",
         headers: {
@@ -984,28 +1031,163 @@ ${content}
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          children: [block],
-          index: afterBlockId ? void 0 : 0
+          children: blocks,
+          index: 0
         })
       }
     );
     const data = await response.json();
     if (data.code !== 0) {
-      console.error(`Failed to insert block: ${data.msg}`);
+      console.error(`Failed to insert blocks: ${data.msg}`);
     }
   }
-  async deleteBlock(docId, blockId, token) {
-    await fetch(
-      `https://open.feishu.cn/open-apis/docx/v1/documents/${docId}/blocks/batch_delete`,
-      {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ start_index: 0, end_index: 1, block_ids: [blockId] })
+  markdownToBlocks(content) {
+    const lines = content.split("\n");
+    const blocks = [];
+    let i2 = 0;
+    while (i2 < lines.length) {
+      const line = lines[i2];
+      if (line.startsWith("```")) {
+        const lang = line.slice(3).trim();
+        const codeLines = [];
+        i2++;
+        while (i2 < lines.length && !lines[i2].startsWith("```")) {
+          codeLines.push(lines[i2]);
+          i2++;
+        }
+        blocks.push({
+          block_type: 21,
+          text_elements: [{ text_run: { content: codeLines.join("\n") } }],
+          properties: { language: lang }
+        });
+        i2++;
+        continue;
       }
-    );
+      if (line.startsWith("# ")) {
+        blocks.push({
+          block_type: 2,
+          text_elements: [{ text_run: { content: line.slice(2) } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.startsWith("## ")) {
+        blocks.push({
+          block_type: 3,
+          text_elements: [{ text_run: { content: line.slice(3) } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.startsWith("### ")) {
+        blocks.push({
+          block_type: 4,
+          text_elements: [{ text_run: { content: line.slice(4) } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.startsWith("- ")) {
+        blocks.push({
+          block_type: 13,
+          text_elements: [{ text_run: { content: line.slice(2) } }]
+        });
+        i2++;
+        continue;
+      }
+      if (/^\d+\.\s/.test(line)) {
+        blocks.push({
+          block_type: 14,
+          text_elements: [{ text_run: { content: line.replace(/^\d+\.\s/, "") } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.startsWith("> ")) {
+        blocks.push({
+          block_type: 15,
+          text_elements: [{ text_run: { content: line.slice(2) } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.startsWith("|")) {
+        blocks.push({
+          block_type: 22,
+          text_elements: [{ text_run: { content: line } }]
+        });
+        i2++;
+        continue;
+      }
+      if (line.trim() === "") {
+        blocks.push({
+          block_type: 1,
+          text_elements: [{ text_run: { content: "" } }]
+        });
+        i2++;
+        continue;
+      }
+      const paraLines = [];
+      while (i2 < lines.length && lines[i2].trim() && !lines[i2].startsWith("#") && !lines[i2].startsWith("-") && !lines[i2].startsWith(">") && !lines[i2].startsWith("```") && !lines[i2].startsWith("|") && !/^\d+\.\s/.test(lines[i2])) {
+        paraLines.push(lines[i2]);
+        i2++;
+      }
+      if (paraLines.length > 0) {
+        const textRuns = this.parseInlineFormatting(paraLines.join(" "));
+        blocks.push({
+          block_type: 1,
+          text_elements: textRuns
+        });
+      }
+    }
+    return blocks;
+  }
+  parseInlineFormatting(text) {
+    const runs = [];
+    let remaining = text;
+    let i2 = 0;
+    while (remaining.length > 0) {
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const italicMatch = remaining.match(/\*(.+?)\*/);
+      const codeMatch = remaining.match(/`(.+?)`/);
+      const strikeMatch = remaining.match(/~~(.+?)~~/);
+      const matches = [
+        { type: "bold", match: boldMatch, index: boldMatch?.index ?? Infinity },
+        { type: "italic", match: italicMatch, index: italicMatch?.index ?? Infinity },
+        { type: "code", match: codeMatch, index: codeMatch?.index ?? Infinity },
+        { type: "strike", match: strikeMatch, index: strikeMatch?.index ?? Infinity }
+      ].filter((m) => m.index < Infinity).sort((a, b2) => a.index - b2.index);
+      if (matches.length === 0) {
+        if (remaining.trim()) {
+          runs.push({ text_run: { content: remaining } });
+        }
+        break;
+      }
+      const first2 = matches[0];
+      if (first2.index > 0) {
+        runs.push({ text_run: { content: remaining.slice(0, first2.index) } });
+      }
+      const content = first2.match[1];
+      switch (first2.type) {
+        case "bold":
+          runs.push({ text_run: { content, bold: true } });
+          break;
+        case "italic":
+          runs.push({ text_run: { content, italic: true } });
+          break;
+        case "code":
+          runs.push({ text_run: { content, code: true } });
+          break;
+        case "strike":
+          runs.push({ text_run: { content, strikethrough: true } });
+          break;
+      }
+      remaining = remaining.slice(first2.index + first2.match[0].length);
+    }
+    if (runs.length === 0) {
+      runs.push({ text_run: { content: text } });
+    }
+    return runs;
   }
   async deleteDocument(docId) {
     const token = await this.getAccessToken();
@@ -1016,6 +1198,11 @@ ${content}
         headers: { "Authorization": `Bearer ${token}` }
       }
     );
+  }
+  // Find document by title
+  async findDocumentByTitle(title) {
+    const docs = await this.listDocuments();
+    return docs.find((d) => d.title === title) || null;
   }
 };
 
@@ -6064,6 +6251,7 @@ var GitHubService = class {
 var SyncManager = class {
   constructor(app, settings, mappings) {
     this.mappings = /* @__PURE__ */ new Map();
+    this.feishuDocCache = /* @__PURE__ */ new Map();
     this.syncTimeout = null;
     this.isSyncing = false;
     this.debounceMs = 2e3;
@@ -6087,16 +6275,16 @@ var SyncManager = class {
     this.isSyncing = true;
     const result = { success: true, direction: "bidirectional", files: [], errors: [] };
     try {
-      const pullResult = await this.syncFromGitHub();
-      result.files.push(...pullResult.files);
-      result.errors.push(...pullResult.errors);
-      const pushResult = await this.syncToGitHub();
-      result.files.push(...pushResult.files);
-      result.errors.push(...pushResult.errors);
-      const feishuResult = await this.syncWithFeishu();
-      result.files.push(...feishuResult.files);
-      result.errors.push(...feishuResult.errors);
-      new import_obsidian.Notice(`Sync complete: ${result.files.length} files synced`);
+      const feishuToObsidianResult = await this.syncFeishuToObsidian();
+      result.files.push(...feishuToObsidianResult.files);
+      result.errors.push(...feishuToObsidianResult.errors);
+      const obsidianToFeishuResult = await this.syncObsidianToFeishu();
+      result.files.push(...obsidianToFeishuResult.files);
+      result.errors.push(...obsidianToFeishuResult.errors);
+      const githubResult = await this.syncWithGitHub();
+      result.files.push(...githubResult.files);
+      result.errors.push(...githubResult.errors);
+      new import_obsidian.Notice(`Sync complete: ${result.files.length} files, ${result.errors.length} errors`);
     } catch (error) {
       result.success = false;
       result.errors.push(String(error));
@@ -6106,123 +6294,244 @@ var SyncManager = class {
     }
     return result;
   }
-  async syncFromGitHub() {
+  // ==================== Feishu → Obsidian ====================
+  async syncFeishuToObsidian() {
     const result = { success: true, direction: "to-obsidian", files: [], errors: [] };
+    try {
+      const feishuDocs = await this.feishu.listDocuments();
+      this.feishuDocCache.clear();
+      for (const doc of feishuDocs) {
+        this.feishuDocCache.set(doc.docId, doc);
+      }
+      for (const docInfo of feishuDocs) {
+        try {
+          const localPath = this.findLocalPathByFeishu(docInfo.docId);
+          const expectedPath = localPath || `Feishu/${this.sanitizeFilename(docInfo.title)}.md`;
+          const doc = await this.feishu.getDocument(docInfo.docId);
+          const existingFile = this.app.vault.getAbstractFileByPath(expectedPath);
+          if (existingFile instanceof import_obsidian.TFile) {
+            const localContent = await this.app.vault.read(existingFile);
+            const normalizedLocal = this.normalizeContent(localContent);
+            const normalizedRemote = this.normalizeContent(doc.content);
+            if (normalizedLocal !== normalizedRemote) {
+              const localModified = existingFile.stat.mtime;
+              const remoteModified = docInfo.updatedTime;
+              if (localModified > remoteModified && this.settings.conflictStrategy === "keep_both") {
+                const conflictPath = expectedPath.replace(".md", `-feishu-conflict-${Date.now()}.md`);
+                const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, "feishu");
+                await this.app.vault.create(conflictPath, `${frontmatter}
+# ${doc.title}
+
+${doc.content}`);
+                result.files.push(`Feishu conflict (kept both): ${conflictPath}`);
+              } else if (localModified > remoteModified) {
+                result.files.push(`Skipped (local newer): ${expectedPath}`);
+              } else {
+                const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, "feishu");
+                const newContent = `${frontmatter}
+# ${doc.title}
+
+${doc.content}`;
+                await this.app.vault.modify(existingFile, newContent);
+                result.files.push(`Updated from Feishu: ${expectedPath}`);
+                this.updateMapping(expectedPath, docInfo.docId);
+              }
+            }
+          } else {
+            const folder = "Feishu";
+            await this.ensureFolderExists(folder);
+            const fullPath = `${folder}/${this.sanitizeFilename(docInfo.title)}.md`;
+            const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, "feishu");
+            const fileContent = `${frontmatter}
+# ${doc.title}
+
+${doc.content}`;
+            await this.app.vault.create(fullPath, fileContent);
+            result.files.push(`Created from Feishu: ${fullPath}`);
+            this.updateMapping(fullPath, docInfo.docId);
+          }
+        } catch (error) {
+          result.errors.push(`Failed to sync Feishu doc ${docInfo.docId}: ${error}`);
+        }
+      }
+    } catch (error) {
+      result.errors.push(`Feishu \u2192 Obsidian sync failed: ${error}`);
+    }
+    return result;
+  }
+  // ==================== Obsidian → Feishu ====================
+  async syncObsidianToFeishu() {
+    const result = { success: true, direction: "to-feishu", files: [], errors: [] };
+    try {
+      const files = this.app.vault.getFiles();
+      for (const file of files) {
+        if (!this.shouldSyncFile(file.path))
+          continue;
+        try {
+          if (file.path.startsWith("Feishu/"))
+            continue;
+          const content = await this.app.vault.read(file);
+          const title = this.extractTitle(content, file.basename);
+          const plainContent = this.stripFrontmatter(content);
+          const mapping = this.mappings.get(file.path);
+          const feishuDocId = mapping?.feishuDocId;
+          if (feishuDocId) {
+            const feishuDoc = this.feishuDocCache.get(feishuDocId);
+            if (feishuDoc) {
+              if (this.hasContentChanged(file, feishuDoc, plainContent)) {
+                await this.feishu.updateDocument(feishuDocId, plainContent, title);
+                result.files.push(`Updated to Feishu: ${file.path}`);
+              }
+            } else {
+              await this.feishu.updateDocument(feishuDocId, plainContent, title);
+              result.files.push(`Updated to Feishu: ${file.path}`);
+            }
+          } else {
+            const existingDoc = await this.feishu.findDocumentByTitle(title);
+            if (existingDoc) {
+              await this.feishu.updateDocument(existingDoc.docId, plainContent, title);
+              this.updateMapping(file.path, existingDoc.docId);
+              result.files.push(`Updated to Feishu: ${file.path}`);
+            } else {
+              const newDocId = await this.feishu.createDocument(title, plainContent);
+              this.updateMapping(file.path, newDocId);
+              result.files.push(`Created in Feishu: ${file.path} \u2192 ${title}`);
+            }
+          }
+        } catch (error) {
+          result.errors.push(`Failed to sync ${file.path}: ${error}`);
+        }
+      }
+    } catch (error) {
+      result.errors.push(`Obsidian \u2192 Feishu sync failed: ${error}`);
+    }
+    return result;
+  }
+  hasContentChanged(file, feishuDoc, plainContent) {
+    const localModified = file.stat.mtime;
+    const remoteModified = feishuDoc.updatedTime;
+    return Math.abs(localModified - remoteModified) > 6e4;
+  }
+  // ==================== GitHub Sync ====================
+  async syncWithGitHub() {
+    const result = { success: true, direction: "to-github", files: [], errors: [] };
     try {
       await this.github.pull();
       const files = this.app.vault.getFiles();
+      let hasChanges = false;
       for (const file of files) {
         if (!this.shouldSyncFile(file.path))
           continue;
-        const githubContent = await this.github.getFileContent(file.path);
-        if (githubContent === null)
-          continue;
-        const localContent = await this.app.vault.read(file);
-        if (localContent !== githubContent) {
-          const localModified = file.stat.mtime;
-          const remoteModified = await this.github.getLastModified(file.path);
-          if (remoteModified && localModified > remoteModified.getTime()) {
-            if (this.settings.conflictStrategy === "keep_both") {
-              const newPath = file.path.replace(".md", `-conflict-${Date.now()}.md`);
-              await this.app.vault.create(newPath, githubContent);
-              result.files.push(`Conflict resolved (kept both): ${file.path}`);
-            }
-          } else {
-            await this.app.vault.modify(file, githubContent);
-            result.files.push(`Updated from GitHub: ${file.path}`);
-          }
-        }
-      }
-    } catch (error) {
-      result.errors.push(`GitHub pull failed: ${error}`);
-    }
-    return result;
-  }
-  async syncToGitHub() {
-    const result = { success: true, direction: "to-github", files: [], errors: [] };
-    try {
-      const status = await this.app.vault.adapter.stat(".obsidian");
-      if (!status) {
-        return result;
-      }
-      const files = this.app.vault.getFiles();
-      for (const file of files) {
-        if (!this.shouldSyncFile(file.path))
+        if (file.path.startsWith("Feishu/"))
           continue;
         const localContent = await this.app.vault.read(file);
         const githubContent = await this.github.getFileContent(file.path);
-        if (githubContent === null || localContent !== githubContent) {
-          result.files.push(`Marked for sync: ${file.path}`);
+        if (githubContent === null || localContent !== this.stripFrontmatter(githubContent)) {
+          hasChanges = true;
         }
       }
-      const commitResult = await this.github.sync();
-      if (commitResult.hasChanges) {
-        result.files.push(`Committed and pushed: ${commitResult.message}`);
+      if (hasChanges) {
+        const commitResult = await this.github.sync();
+        result.files.push(`GitHub sync: ${commitResult.message}`);
       }
     } catch (error) {
-      result.errors.push(`GitHub push failed: ${error}`);
+      result.errors.push(`GitHub sync failed: ${error}`);
     }
     return result;
   }
-  async syncWithFeishu() {
-    const result = { success: true, direction: "to-feishu", files: [], errors: [] };
-    try {
-      const docs = await this.feishu.listDocuments();
-      for (const docId of docs) {
-        const doc = await this.feishu.getDocument(docId);
-        const localPath = this.findMappingByFeishu(docId) || `Feishu/${doc.title}.md`;
-        const existingFile = this.app.vault.getAbstractFileByPath(localPath.replace(".md", ""));
-        if (existingFile instanceof import_obsidian.TFile) {
-          const localContent = await this.app.vault.read(existingFile);
-          if (localContent !== doc.content) {
-            await this.app.vault.modify(existingFile, doc.content);
-            result.files.push(`Updated from Feishu: ${localPath}`);
-          }
-        } else {
-          await this.app.vault.create(localPath, `# ${doc.title}
-
-${doc.content}`);
-          result.files.push(`Created from Feishu: ${localPath}`);
-        }
-      }
-    } catch (error) {
-      result.errors.push(`Feishu sync failed: ${error}`);
-    }
-    return result;
-  }
+  // ==================== File Change Handler ====================
   async onFileChange(file) {
     if (!this.shouldSyncFile(file.path))
+      return;
+    if (file.path.startsWith("Feishu/"))
       return;
     if (this.syncTimeout) {
       clearTimeout(this.syncTimeout);
     }
     this.syncTimeout = setTimeout(async () => {
-      await this.syncFile(file);
+      await this.syncSingleFile(file);
     }, this.debounceMs);
   }
-  async syncFile(file) {
-    const content = await this.app.vault.read(file);
+  async syncSingleFile(file) {
     try {
+      const content = await this.app.vault.read(file);
+      const title = this.extractTitle(content, file.basename);
+      const plainContent = this.stripFrontmatter(content);
       const mapping = this.mappings.get(file.path);
-      if (mapping?.githubPath) {
+      if (mapping?.feishuDocId) {
+        await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
+      } else {
+        const newDocId = await this.feishu.createDocument(title, plainContent);
+        this.updateMapping(file.path, newDocId);
       }
     } catch (error) {
       console.error(`Failed to sync ${file.path}:`, error);
     }
   }
+  async onFileDelete(filePath) {
+    const mapping = this.mappings.get(filePath);
+    if (mapping?.feishuDocId) {
+      try {
+        await this.feishu.deleteDocument(mapping.feishuDocId);
+        this.mappings.delete(filePath);
+      } catch (error) {
+        console.error(`Failed to delete Feishu doc ${mapping.feishuDocId}:`, error);
+      }
+    }
+  }
+  // ==================== Helpers ====================
   shouldSyncFile(path) {
     if (!this.settings.syncFolder)
       return true;
     const normalizedPath = path.replace(/\\/g, "/");
     return normalizedPath.startsWith(this.settings.syncFolder);
   }
-  findMappingByFeishu(docId) {
+  findLocalPathByFeishu(docId) {
     for (const [path, mapping] of this.mappings) {
       if (mapping.feishuDocId === docId) {
         return path;
       }
     }
     return null;
+  }
+  updateMapping(localPath, feishuDocId) {
+    const existing = this.mappings.get(localPath);
+    const mapping = {
+      localPath,
+      feishuDocId,
+      githubPath: existing?.githubPath || localPath,
+      lastSynced: Date.now(),
+      hash: existing?.hash || ""
+    };
+    this.mappings.set(localPath, mapping);
+  }
+  sanitizeFilename(name) {
+    return name.replace(/[\\/:*?"<>|]/g, "_").substring(0, 100);
+  }
+  extractTitle(content, defaultTitle) {
+    const match = content.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : defaultTitle;
+  }
+  stripFrontmatter(content) {
+    const match = content.match(/^---\n[\s\S]*?\n---\n?/);
+    return match ? content.slice(match[0].length) : content;
+  }
+  normalizeContent(content) {
+    return this.stripFrontmatter(content).replace(/\s+/g, " ").trim();
+  }
+  generateFrontmatter(title, docId, source) {
+    return `---
+title: ${title}
+feishu_doc_id: ${docId}
+source: ${source}
+last_synced: ${(/* @__PURE__ */ new Date()).toISOString()}
+---`;
+  }
+  async ensureFolderExists(folderPath) {
+    const existing = this.app.vault.getAbstractFileByPath(folderPath);
+    if (!existing) {
+      await this.app.vault.createFolder(folderPath);
+    }
   }
   getMappings() {
     return Array.from(this.mappings.values());
@@ -6232,6 +6541,9 @@ ${doc.content}`);
   }
   removeMapping(localPath) {
     this.mappings.delete(localPath);
+  }
+  getMapping(filePath) {
+    return this.mappings.get(filePath);
   }
 };
 
