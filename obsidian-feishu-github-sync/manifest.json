@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-feishu-github-sync",
+  "name": "Feishu GitHub Sync",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "author": "Chen Chen",
+  "description": "Bidirectional sync between Obsidian, Feishu docs, and GitHub",
+  "fundingUrl": ""
+}
