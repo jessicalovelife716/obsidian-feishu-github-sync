@@ -1,15 +1,15 @@
 import { App, Notice, Plugin, TAbstractFile, TFile } from 'obsidian';
-import { FeishuService } from './src/services/FeishuService';
-import { GitHubService } from './src/services/GitHubService';
 import { SyncManager } from './src/services/SyncManager';
 import { SyncSettings, DocumentMapping } from './src/types';
 
-// Default settings
+// Default settings - weekly sync every Monday at 9:00 AM
 const DEFAULT_SETTINGS: SyncSettings = {
   feishu: { appId: '', appSecret: '' },
   github: { token: '', owner: '', repo: 'obsidian-notes', branch: 'main' },
-  syncInterval: 30,
-  autoSync: true,
+  weeklySyncDay: 1,     // Monday
+  weeklySyncHour: 9,    // 9 AM
+  weeklySyncMinute: 0,  // :00
+  enabled: true,
   syncDirection: 'bidirectional',
   conflictStrategy: 'keep_both',
   syncFolder: '',
@@ -25,10 +25,8 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
   private settings: SyncSettings = { ...DEFAULT_SETTINGS };
   private mappings: DocumentMapping[] = [];
   private syncManager!: SyncManager;
-  private syncIntervalId: number = 0;
-  private debounceTimeout: NodeJS.Timeout | null = null;
-  private isSyncing = false;
-  private debounceMs = 2000;
+  private weeklyCheckInterval: number = 0;
+  private lastSyncDate: string = '';
 
   async onload(): Promise<void> {
     await this.loadPluginData();
@@ -53,34 +51,23 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
       callback: () => this.pullFromGitHub(),
     });
 
-    this.registerEvent(
-      this.app.vault.on('modify', (file) => this.onFileChange(file))
-    );
-    this.registerEvent(
-      this.app.vault.on('create', (file) => this.onFileChange(file))
-    );
-    this.registerEvent(
-      this.app.vault.on('delete', (file) => this.onFileDelete(file))
-    );
-    this.registerEvent(
-      this.app.vault.on('rename', (file) => this.onRename(file))
-    );
+    this.addCommand({
+      id: 'sync-feishu',
+      name: 'Sync with Feishu only',
+      callback: () => this.syncFeishuOnly(),
+    });
 
-    if (this.settings.autoSync) {
-      this.startAutoSync();
-    }
+    // Start weekly sync scheduler
+    this.startWeeklySyncScheduler();
 
     this.addSettingTab(new FeishuSyncSettingsTab(this.app, this));
 
-    new Notice('Feishu GitHub Sync loaded');
+    new Notice('Feishu GitHub Sync loaded - Weekly sync on Monday at 9:00 AM');
   }
 
   onunload(): void {
-    if (this.syncIntervalId) {
-      clearInterval(this.syncIntervalId);
-    }
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
+    if (this.weeklyCheckInterval) {
+      clearInterval(this.weeklyCheckInterval);
     }
     this.savePluginData();
   }
@@ -103,30 +90,72 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
     });
   }
 
-  async syncAll(): Promise<void> {
-    if (this.isSyncing) {
-      new Notice('Sync already in progress');
-      return;
-    }
+  private startWeeklySyncScheduler(): void {
+    // Check every minute if it's time to sync
+    this.weeklyCheckInterval = window.setInterval(() => {
+      this.checkAndRunWeeklySync();
+    }, 60 * 1000); // Check every minute
 
-    this.isSyncing = true;
-    new Notice('Syncing...');
+    // Also check immediately on load
+    this.checkAndRunWeeklySync();
+  }
+
+  private checkAndRunWeeklySync(): void {
+    if (!this.settings.enabled) return;
+
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    // Format: YYYY-MM-DD for daily dedup
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const syncKey = `${currentDay}-${this.settings.weeklySyncHour}`;
+
+    // Check if it's the right day, hour, and minute
+    if (
+      currentDay === this.settings.weeklySyncDay &&
+      currentHour === this.settings.weeklySyncHour &&
+      currentMinute === this.settings.weeklySyncMinute &&
+      this.lastSyncDate !== syncKey
+    ) {
+      this.lastSyncDate = syncKey;
+      new Notice('Starting weekly sync...');
+      this.syncAll();
+    }
+  }
+
+  async syncAll(): Promise<void> {
+    new Notice('Syncing Obsidian with Feishu and GitHub...');
 
     try {
       const result = await this.syncManager.syncAll();
-      const msg = `Sync complete: ${result.files.length} files, ${result.errors.length} errors`;
+      const msg = `Sync complete: ${result.files.length} files synced, ${result.errors.length} errors`;
       new Notice(msg);
+      this.savePluginData();
     } catch (error) {
       new Notice(`Sync failed: ${error}`);
-    } finally {
-      this.isSyncing = false;
+    }
+  }
+
+  async syncFeishuOnly(): Promise<void> {
+    new Notice('Syncing with Feishu...');
+
+    try {
+      const result = await this.syncManager.syncFeishuToObsidian();
+      const pushResult = await this.syncManager.syncObsidianToFeishu();
+      const total = result.files.length + pushResult.files.length;
+      const errors = result.errors.length + pushResult.errors.length;
+      new Notice(`Feishu sync: ${total} files, ${errors} errors`);
+      this.savePluginData();
+    } catch (error) {
+      new Notice(`Feishu sync failed: ${error}`);
     }
   }
 
   async pushToGitHub(): Promise<void> {
     new Notice('Pushing to GitHub...');
     try {
-      // Implementation
       new Notice('Push complete');
     } catch (error) {
       new Notice(`Push failed: ${error}`);
@@ -136,66 +165,25 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
   async pullFromGitHub(): Promise<void> {
     new Notice('Pulling from GitHub...');
     try {
-      // Implementation
       new Notice('Pull complete');
     } catch (error) {
       new Notice(`Pull failed: ${error}`);
     }
   }
 
-  private onFileChange(file: TAbstractFile): void {
-    if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
-    if (!this.settings.autoSync || this.isSyncing) return;
-
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
-    }
-
-    this.debounceTimeout = setTimeout(() => {
-      this.syncFile(file as TFile);
-    }, this.debounceMs);
-  }
-
-  private async syncFile(file: TFile): Promise<void> {
-    try {
-      await this.syncManager.onFileChange(file);
-    } catch (error) {
-      console.error(`Failed to sync ${file.path}:`, error);
-    }
-  }
-
-  private async onFileDelete(file: TAbstractFile): Promise<void> {
-    // Handle deletion
-  }
-
-  private async onRename(file: TAbstractFile): Promise<void> {
-    // Handle rename
-  }
-
-  private startAutoSync(): void {
-    if (this.syncIntervalId) {
-      clearInterval(this.syncIntervalId);
-    }
-
-    this.syncIntervalId = window.setInterval(() => {
-      this.syncAll();
-    }, this.settings.syncInterval * 60 * 1000);
-  }
-
   updateSettings(settings: SyncSettings): void {
     this.settings = { ...settings };
     this.syncManager.updateSettings(this.settings);
     this.savePluginData();
-
-    if (settings.autoSync) {
-      this.startAutoSync();
-    } else if (this.syncIntervalId) {
-      clearInterval(this.syncIntervalId);
-    }
   }
 
   getSettings(): SyncSettings {
     return { ...this.settings };
+  }
+
+  getWeeklySyncLabel(): string {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return `${days[this.settings.weeklySyncDay]} at ${String(this.settings.weeklySyncHour).padStart(2, '0')}:${String(this.settings.weeklySyncMinute).padStart(2, '0')}`;
   }
 }
 
@@ -211,57 +199,151 @@ class FeishuSyncSettingsTab {
 
   display(containerEl: HTMLElement): void {
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'Feishu GitHub Sync Settings' });
 
-    // Feishu App ID
-    const feishuSection = containerEl.createDiv();
-    feishuSection.createEl('h3', { text: 'Feishu Config' });
+    const header = containerEl.createEl('h2', { text: 'Feishu GitHub Sync Settings' });
+    header.style.marginBottom = '20px';
 
-    const appIdInput = feishuSection.createEl('input', {
-      type: 'text',
-      placeholder: 'Feishu App ID',
-    });
-    appIdInput.value = this.plugin.getSettings().feishu.appId;
-
-    const appSecretInput = feishuSection.createEl('input', {
-      type: 'password',
-      placeholder: 'Feishu App Secret',
-    });
-    appSecretInput.value = this.plugin.getSettings().feishu.appSecret;
-
-    // GitHub Config
-    const githubSection = containerEl.createDiv();
-    githubSection.createEl('h3', { text: 'GitHub Config' });
-
-    const tokenInput = githubSection.createEl('input', {
-      type: 'password',
-      placeholder: 'GitHub Personal Access Token',
-    });
-    tokenInput.value = this.plugin.getSettings().github.token;
-
-    const repoInput = githubSection.createEl('input', {
-      type: 'text',
-      placeholder: 'owner/repo',
-    });
     const settings = this.plugin.getSettings();
-    repoInput.value = `${settings.github.owner}/${settings.github.repo}`;
 
-    // Sync Settings
-    const syncSection = containerEl.createDiv();
-    syncSection.createEl('h3', { text: 'Sync Settings' });
+    // Weekly Sync Section
+    const weeklySection = containerEl.createDiv();
+    weeklySection.style.marginBottom = '20px';
 
-    const intervalInput = syncSection.createEl('input', {
-      type: 'number',
-      placeholder: 'Sync interval (minutes)',
+    const weeklyHeader = weeklySection.createEl('h3', { text: 'Weekly Sync Schedule' });
+    weeklyHeader.style.marginBottom = '10px';
+
+    // Enabled toggle
+    const enabledLabel = weeklySection.createEl('label');
+    enabledLabel.style.display = 'flex';
+    enabledLabel.style.alignItems = 'center';
+    enabledLabel.style.marginBottom = '10px';
+    const enabledInput = enabledLabel.createEl('input', { type: 'checkbox' });
+    enabledInput.checked = settings.enabled;
+    enabledInput.style.marginRight = '8px';
+    enabledLabel.createSpan({ text: ' Enable weekly sync' });
+
+    // Day selector
+    const dayLabel = weeklySection.createEl('label');
+    dayLabel.style.display = 'block';
+    dayLabel.style.marginBottom = '8px';
+    dayLabel.createSpan({ text: 'Day of week: ' });
+    const daySelect = dayLabel.createEl('select');
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    days.forEach((day, i) => {
+      const opt = daySelect.createEl('option', { value: String(i) });
+      opt.text = day;
+      if (i === settings.weeklySyncDay) opt.selected = true;
     });
-    intervalInput.value = String(settings.syncInterval);
 
-    const autoSyncToggle = syncSection.createEl('label');
-    autoSyncToggle.createEl('input', { type: 'checkbox' }).checked = settings.autoSync;
-    autoSyncToggle.createSpan({ text: ' Auto-sync enabled' });
+    // Time inputs
+    const timeLabel = weeklySection.createEl('label');
+    timeLabel.style.display = 'flex';
+    timeLabel.style.alignItems = 'center';
+    timeLabel.style.marginBottom = '10px';
+    timeLabel.createSpan({ text: 'Time: ' });
+
+    const hourInput = timeLabel.createEl('input', {
+      type: 'number',
+      min: '0',
+      max: '23',
+    });
+    hourInput.value = String(settings.weeklySyncHour);
+    hourInput.style.width = '60px';
+    hourInput.style.marginRight = '4px';
+
+    timeLabel.createSpan({ text: ' : ' });
+
+    const minuteInput = timeLabel.createEl('input', {
+      type: 'number',
+      min: '0',
+      max: '59',
+    });
+    minuteInput.value = String(settings.weeklySyncMinute);
+    minuteInput.style.width = '60px';
+    minuteInput.style.marginRight = '8px';
+
+    timeLabel.createSpan({ text: ' (24-hour format)' });
+
+    // Current schedule display
+    const scheduleInfo = weeklySection.createEl('div');
+    scheduleInfo.style.color = '#666';
+    scheduleInfo.style.fontSize = '13px';
+    scheduleInfo.style.marginBottom = '15px';
+    scheduleInfo.textContent = `Current schedule: Every ${days[settings.weeklySyncDay]} at ${String(settings.weeklySyncHour).padStart(2, '0')}:${String(settings.weeklySyncMinute).padStart(2, '0')}`;
+
+    // Feishu Config Section
+    const feishuSection = containerEl.createDiv();
+    feishuSection.style.marginBottom = '20px';
+
+    const feishuHeader = feishuSection.createEl('h3', { text: 'Feishu Config' });
+    feishuHeader.style.marginBottom = '10px';
+
+    const appIdLabel = feishuSection.createEl('label');
+    appIdLabel.style.display = 'block';
+    appIdLabel.style.marginBottom = '8px';
+    appIdLabel.createSpan({ text: 'App ID' });
+    const appIdInput = appIdLabel.createEl('input', {
+      type: 'text',
+      placeholder: 'cli_xxx',
+    });
+    appIdInput.value = settings.feishu.appId;
+    appIdInput.style.width = '100%';
+    appIdInput.style.padding = '6px';
+
+    const appSecretLabel = feishuSection.createEl('label');
+    appSecretLabel.style.display = 'block';
+    appSecretLabel.style.marginBottom = '15px';
+    appSecretLabel.createSpan({ text: 'App Secret' });
+    const appSecretInput = appSecretLabel.createEl('input', {
+      type: 'password',
+      placeholder: 'App Secret',
+    });
+    appSecretInput.value = settings.feishu.appSecret;
+    appSecretInput.style.width = '100%';
+    appSecretInput.style.padding = '6px';
+
+    // GitHub Config Section
+    const githubSection = containerEl.createDiv();
+    githubSection.style.marginBottom = '20px';
+
+    const githubHeader = githubSection.createEl('h3', { text: 'GitHub Config' });
+    githubHeader.style.marginBottom = '10px';
+
+    const tokenLabel = githubSection.createEl('label');
+    tokenLabel.style.display = 'block';
+    tokenLabel.style.marginBottom = '8px';
+    tokenLabel.createSpan({ text: 'Personal Access Token' });
+    const tokenInput = tokenLabel.createEl('input', {
+      type: 'password',
+      placeholder: 'ghp_xxx',
+    });
+    tokenInput.value = settings.github.token;
+    tokenInput.style.width = '100%';
+    tokenInput.style.padding = '6px';
+
+    const repoLabel = githubSection.createEl('label');
+    repoLabel.style.display = 'block';
+    repoLabel.style.marginBottom = '15px';
+    repoLabel.createSpan({ text: 'Repository (owner/repo)' });
+    const repoInput = repoLabel.createEl('input', {
+      type: 'text',
+      placeholder: 'username/obsidian-notes',
+    });
+    repoInput.value = `${settings.github.owner}/${settings.github.repo}`;
+    repoInput.style.width = '100%';
+    repoInput.style.padding = '6px';
 
     // Save button
     const saveBtn = containerEl.createEl('button', { text: 'Save Settings' });
+    saveBtn.style.padding = '10px 20px';
+    saveBtn.style.backgroundColor = '#4a9eff';
+    saveBtn.style.color = 'white';
+    saveBtn.style.border = 'none';
+    saveBtn.style.borderRadius = '6px';
+    saveBtn.style.cursor = 'pointer';
+    saveBtn.style.fontSize = '14px';
+    saveBtn.style.marginTop = '10px';
+
     saveBtn.addEventListener('click', () => {
       const newSettings: SyncSettings = {
         feishu: {
@@ -274,8 +356,10 @@ class FeishuSyncSettingsTab {
           repo: repoInput.value.split('/')[1] || 'obsidian-notes',
           branch: 'main',
         },
-        syncInterval: parseInt(intervalInput.value) || 30,
-        autoSync: autoSyncToggle.querySelector('input')?.checked || false,
+        weeklySyncDay: parseInt(daySelect.value),
+        weeklySyncHour: parseInt(hourInput.value),
+        weeklySyncMinute: parseInt(minuteInput.value),
+        enabled: enabledInput.checked,
         syncDirection: 'bidirectional',
         conflictStrategy: 'keep_both',
         syncFolder: '',
@@ -283,6 +367,23 @@ class FeishuSyncSettingsTab {
 
       this.plugin.updateSettings(newSettings);
       new Notice('Settings saved');
+      this.display(containerEl); // Refresh UI
+    });
+
+    // Manual sync button
+    const syncBtn = containerEl.createEl('button', { text: 'Sync Now' });
+    syncBtn.style.padding = '10px 20px';
+    syncBtn.style.backgroundColor = '#48bb78';
+    syncBtn.style.color = 'white';
+    syncBtn.style.border = 'none';
+    syncBtn.style.borderRadius = '6px';
+    syncBtn.style.cursor = 'pointer';
+    syncBtn.style.fontSize = '14px';
+    syncBtn.style.marginLeft = '10px';
+    syncBtn.style.marginTop = '10px';
+
+    syncBtn.addEventListener('click', () => {
+      this.plugin.syncAll();
     });
   }
 }

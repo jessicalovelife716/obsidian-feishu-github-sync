@@ -13,8 +13,11 @@ export interface GitHubConfig {
 export interface SyncSettings {
   feishu: FeishuConfig;
   github: GitHubConfig;
-  syncInterval: number; // minutes
-  autoSync: boolean;
+  // Weekly sync: day of week (0=Sunday, 1=Monday, ...), hour (0-23), minute (0-59)
+  weeklySyncDay: number;    // 0-6, default 1 (Monday)
+  weeklySyncHour: number;   // 0-23, default 9
+  weeklySyncMinute: number; // 0-59, default 0
+  enabled: boolean;         // whether weekly sync is enabled
   syncDirection: 'bidirectional' | 'obsidian-to-remote' | 'remote-to-obsidian';
   conflictStrategy: 'keep_both' | 'local_wins' | 'remote_wins';
   syncFolder: string; // folder path in vault to sync
