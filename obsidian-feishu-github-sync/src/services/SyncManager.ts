@@ -1,79 +1,266 @@
-import { App, TFile, Notice } from 'obsidian';
-import { SyncSettings, DocumentMapping, SyncResult } from '../types';
-import { FeishuService, FeishuDocInfo } from './FeishuService';
+import { App, TFile, TFolder, Notice } from 'obsidian';
+import { SyncSettings, DocumentMapping, SyncResult, SyncStatus } from '../types';
+import { FeishuService } from './FeishuService';
 import { GitHubService } from './GitHubService';
+import { VaultAdapter } from './VaultAdapter';
+
+type SyncStatusListener = (status: SyncStatus) => void;
 
 export class SyncManager {
   private app: App;
   private feishu: FeishuService;
   private github: GitHubService;
   private settings: SyncSettings;
-  private mappings: Map<string, DocumentMapping> = new Map();
-  private feishuDocCache: Map<string, FeishuDocInfo> = new Map();
-  private syncTimeout: NodeJS.Timeout | null = null;
-  private isSyncing = false;
-  private debounceMs = 2000;
+  private vaultAdapter: VaultAdapter;
 
-  constructor(app: App, settings: SyncSettings, mappings: DocumentMapping[]) {
+  // Lock
+  private _isSyncing = false;
+  private _syncLock = false;
+  private _statusListeners: SyncStatusListener[] = [];
+  private _status: SyncStatus = 'idle';
+
+  // Mappings
+  private mappings: Map<string, DocumentMapping> = new Map();
+  private feishuDocCache: Map<string, import('../types').FeishuDocInfo> = new Map();
+
+  // File watcher debounce
+  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private readonly DEBOUNCE_MS = 3000;
+  private watcherSuspended = false;
+
+  // Callbacks for main.ts
+  onStatusChange: ((status: SyncStatus, message?: string) => void) | null = null;
+  onSyncComplete: ((result: SyncResult) => void) | null = null;
+
+  constructor(
+    app: App,
+    settings: SyncSettings,
+    mappings: DocumentMapping[],
+    feishu: FeishuService,
+    github: GitHubService,
+    vaultAdapter: VaultAdapter,
+  ) {
     this.app = app;
     this.settings = settings;
-    this.feishu = new FeishuService(settings.feishu);
-    this.github = new GitHubService(settings.github, app.vault.getRoot().path);
+    this.vaultAdapter = vaultAdapter;
+    this.feishu = feishu;
+    this.github = github;
 
-    // Load mappings
     for (const m of mappings) {
       this.mappings.set(m.localPath, m);
     }
+
+    // Wire up image callbacks
+    this.feishu.onImageDownloaded = async (localPath, data) => {
+      await this.saveImageLocally(localPath, data);
+    };
+    this.feishu.onImageRead = async (localPath) => {
+      return this.readImageLocally(localPath);
+    };
   }
 
-  updateSettings(settings: SyncSettings): void {
-    this.settings = settings;
-    this.feishu = new FeishuService(settings.feishu);
-    this.github = new GitHubService(settings.github, this.app.vault.getRoot().path);
+  // ==================== Status ====================
+
+  get status(): SyncStatus {
+    return this._status;
   }
+
+  get isSyncing(): boolean {
+    return this._isSyncing;
+  }
+
+  private setStatus(status: SyncStatus, message?: string) {
+    this._status = status;
+    this.onStatusChange?.(status, message);
+  }
+
+  // ==================== Sync Lock ====================
+
+  private acquireLock(): boolean {
+    if (this._syncLock) return false;
+    this._syncLock = true;
+    this._isSyncing = true;
+    this.suspendWatcher();
+    this.setStatus('syncing');
+    return true;
+  }
+
+  private releaseLock(): void {
+    this._syncLock = false;
+    this._isSyncing = false;
+    this.resumeWatcher();
+    this.setStatus('idle');
+  }
+
+  // ==================== File Watcher Control ====================
+
+  private suspendWatcher(): void {
+    this.watcherSuspended = true;
+  }
+
+  private resumeWatcher(): void {
+    this.watcherSuspended = false;
+  }
+
+  get isWatcherSuspended(): boolean {
+    return this.watcherSuspended;
+  }
+
+  // ==================== Debounced File Change Handler ====================
+
+  onFileModified(file: TFile): void {
+    if (!this.settings.fileWatcherEnabled) return;
+    if (this.watcherSuspended || this._syncLock) return;
+    if (!this.shouldSyncFile(file.path)) return;
+
+    // Clear existing timer for this file
+    const existing = this.debounceTimers.get(file.path);
+    if (existing) clearTimeout(existing);
+
+    // Set new debounce timer (3s)
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(file.path);
+      this.syncSingleFile(file).catch(console.error);
+    }, this.DEBOUNCE_MS);
+
+    this.debounceTimers.set(file.path, timer);
+  }
+
+  onFileRenamed(file: TFile, oldPath: string): void {
+    // Update mapping with new path
+    const mapping = this.mappings.get(oldPath);
+    if (mapping) {
+      this.mappings.delete(oldPath);
+      mapping.localPath = file.path;
+      this.mappings.set(file.path, mapping);
+    }
+  }
+
+  onFileDeleted(filePath: string): void {
+    // Do NOT call Feishu delete API — just unbind mapping
+    const mapping = this.mappings.get(filePath);
+    if (mapping) {
+      // Optionally move Feishu doc to trash instead
+      // this.feishu.deleteDocument(mapping.feishuDocId).catch(console.error);
+      this.mappings.delete(filePath);
+    }
+  }
+
+  // ==================== Main Sync ====================
 
   async syncAll(): Promise<SyncResult> {
-    if (this.isSyncing) {
-      return { success: false, direction: 'to-obsidian', files: [], errors: ['Sync already in progress'] };
+    if (!this.acquireLock()) {
+      return { success: false, direction: 'bidirectional', files: [], errors: ['Sync already in progress'] };
     }
 
-    this.isSyncing = true;
     const result: SyncResult = { success: true, direction: 'bidirectional', files: [], errors: [] };
 
     try {
-      // Step 1: Sync Feishu → Obsidian (get remote changes first)
-      const feishuToObsidianResult = await this.syncFeishuToObsidian();
-      result.files.push(...feishuToObsidianResult.files);
-      result.errors.push(...feishuToObsidianResult.errors);
+      // Step 1: Feishu → Obsidian
+      const feishuResult = await this.syncFeishuToObsidian();
+      result.files.push(...feishuResult.files);
+      result.errors.push(...feishuResult.errors);
 
-      // Step 2: Sync Obsidian → Feishu (push local changes)
-      const obsidianToFeishuResult = await this.syncObsidianToFeishu();
-      result.files.push(...obsidianToFeishuResult.files);
-      result.errors.push(...obsidianToFeishuResult.errors);
+      // Step 2: Obsidian → Feishu
+      const obsidianResult = await this.syncObsidianToFeishu();
+      result.files.push(...obsidianResult.files);
+      result.errors.push(...obsidianResult.errors);
 
-      // Step 3: Sync GitHub (bidirectional)
+      // Step 3: GitHub sync
       const githubResult = await this.syncWithGitHub();
       result.files.push(...githubResult.files);
       result.errors.push(...githubResult.errors);
 
-      new Notice(`Sync complete: ${result.files.length} files, ${result.errors.length} errors`);
+      if (result.errors.length === 0) {
+        this.setStatus('idle');
+      } else {
+        this.setStatus('error', `${result.errors.length} errors during sync`);
+      }
+
+      this.onSyncComplete?.(result);
     } catch (error) {
       result.success = false;
       result.errors.push(String(error));
-      new Notice(`Sync failed: ${error}`);
+      this.setStatus('error', String(error));
     } finally {
-      this.isSyncing = false;
+      this.releaseLock();
+    }
+
+    return result;
+  }
+
+  async syncFeishuOnly(): Promise<SyncResult> {
+    if (!this.acquireLock()) {
+      return { success: false, direction: 'to-obsidian', files: [], errors: ['Sync already in progress'] };
+    }
+
+    const result: SyncResult = { success: true, direction: 'bidirectional', files: [], errors: [] };
+
+    try {
+      const feishuResult = await this.syncFeishuToObsidian();
+      result.files.push(...feishuResult.files);
+      result.errors.push(...feishuResult.errors);
+
+      const obsidianResult = await this.syncObsidianToFeishu();
+      result.files.push(...obsidianResult.files);
+      result.errors.push(...obsidianResult.errors);
+    } catch (error) {
+      result.success = false;
+      result.errors.push(String(error));
+    } finally {
+      this.releaseLock();
+    }
+
+    return result;
+  }
+
+  async pushToGitHub(): Promise<SyncResult> {
+    if (!this.acquireLock()) {
+      return { success: false, direction: 'to-github', files: [], errors: ['Sync already in progress'] };
+    }
+
+    const result: SyncResult = { success: true, direction: 'to-github', files: [], errors: [] };
+
+    try {
+      const r = await this.github.sync();
+      result.files.push(r.message);
+    } catch (error) {
+      result.success = false;
+      result.errors.push(String(error));
+    } finally {
+      this.releaseLock();
+    }
+
+    return result;
+  }
+
+  async pullFromGitHub(): Promise<SyncResult> {
+    if (!this.acquireLock()) {
+      return { success: false, direction: 'to-obsidian', files: [], errors: ['Sync already in progress'] };
+    }
+
+    const result: SyncResult = { success: true, direction: 'to-obsidian', files: [], errors: [] };
+
+    try {
+      await this.github.ensureCloneOrPull();
+      await this.github.pull();
+      result.files.push('Pulled from GitHub');
+    } catch (error) {
+      result.success = false;
+      result.errors.push(String(error));
+    } finally {
+      this.releaseLock();
     }
 
     return result;
   }
 
   // ==================== Feishu → Obsidian ====================
+
   async syncFeishuToObsidian(): Promise<SyncResult> {
     const result: SyncResult = { success: true, direction: 'to-obsidian', files: [], errors: [] };
 
     try {
-      // Get all Feishu docs
       const feishuDocs = await this.feishu.listDocuments();
       this.feishuDocCache.clear();
       for (const doc of feishuDocs) {
@@ -82,58 +269,51 @@ export class SyncManager {
 
       for (const docInfo of feishuDocs) {
         try {
-          // Find corresponding local file via mapping
           const localPath = this.findLocalPathByFeishu(docInfo.docId);
           const expectedPath = localPath || `Feishu/${this.sanitizeFilename(docInfo.title)}.md`;
 
           const doc = await this.feishu.getDocument(docInfo.docId);
 
-          // Check if file exists locally
+          // Process images in content
+          const { content, imageMap } = await this.processFeishuImages(doc.content);
+
           const existingFile = this.app.vault.getAbstractFileByPath(expectedPath);
 
           if (existingFile instanceof TFile) {
-            // Check if content differs (compare by hash or content)
             const localContent = await this.app.vault.read(existingFile);
             const normalizedLocal = this.normalizeContent(localContent);
             const normalizedRemote = this.normalizeContent(doc.content);
 
             if (normalizedLocal !== normalizedRemote) {
-              // Check for conflict
               const localModified = existingFile.stat.mtime;
               const remoteModified = docInfo.updatedTime;
 
               if (localModified > remoteModified && this.settings.conflictStrategy === 'keep_both') {
-                // Local is newer, create conflict copy
+                // Local is newer — keep both
                 const conflictPath = expectedPath.replace('.md', `-feishu-conflict-${Date.now()}.md`);
                 const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, 'feishu');
-                await this.app.vault.create(conflictPath, `${frontmatter}\n# ${doc.title}\n\n${doc.content}`);
-                result.files.push(`Feishu conflict (kept both): ${conflictPath}`);
-              } else if (localModified > remoteModified) {
-                // Local is newer, keep local
-                result.files.push(`Skipped (local newer): ${expectedPath}`);
+                await this.app.vault.create(conflictPath, `${frontmatter}\n# ${doc.title}\n\n${content}`);
+                result.files.push(`Conflict (kept both): ${conflictPath}`);
+              } else if (localModified > remoteModified && this.settings.conflictStrategy === 'local_wins') {
+                result.files.push(`Skipped (local newer, strategy=local_wins): ${expectedPath}`);
               } else {
-                // Remote is newer or no local, update
+                // Remote wins
                 const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, 'feishu');
-                const newContent = `${frontmatter}\n# ${doc.title}\n\n${doc.content}`;
+                const newContent = `${frontmatter}\n# ${doc.title}\n\n${content}`;
                 await this.app.vault.modify(existingFile, newContent);
                 result.files.push(`Updated from Feishu: ${expectedPath}`);
-
-                // Update mapping
                 this.updateMapping(expectedPath, docInfo.docId);
               }
             }
           } else {
-            // Create new file from Feishu doc
+            // Create new file
             const folder = 'Feishu';
             await this.ensureFolderExists(folder);
-
             const fullPath = `${folder}/${this.sanitizeFilename(docInfo.title)}.md`;
             const frontmatter = this.generateFrontmatter(docInfo.title, docInfo.docId, 'feishu');
-            const fileContent = `${frontmatter}\n# ${doc.title}\n\n${doc.content}`;
+            const fileContent = `${frontmatter}\n# ${doc.title}\n\n${content}`;
             await this.app.vault.create(fullPath, fileContent);
             result.files.push(`Created from Feishu: ${fullPath}`);
-
-            // Update mapping
             this.updateMapping(fullPath, docInfo.docId);
           }
         } catch (error) {
@@ -148,55 +328,58 @@ export class SyncManager {
   }
 
   // ==================== Obsidian → Feishu ====================
+
   async syncObsidianToFeishu(): Promise<SyncResult> {
     const result: SyncResult = { success: true, direction: 'to-feishu', files: [], errors: [] };
 
     try {
-      // Get all local files
       const files = this.app.vault.getFiles();
 
       for (const file of files) {
         if (!this.shouldSyncFile(file.path)) continue;
+        if (file.path.startsWith('Feishu/')) continue;
 
         try {
-          // Skip Feishu folder files (already synced from Feishu)
-          if (file.path.startsWith('Feishu/')) continue;
-
           const content = await this.app.vault.read(file);
           const title = this.extractTitle(content, file.basename);
           const plainContent = this.stripFrontmatter(content);
 
-          // Find mapping for this file
           const mapping = this.mappings.get(file.path);
-          const feishuDocId = mapping?.feishuDocId;
 
-          if (feishuDocId) {
-            // Update existing Feishu doc
-            const feishuDoc = this.feishuDocCache.get(feishuDocId);
+          if (mapping?.feishuDocId) {
+            const feishuDoc = this.feishuDocCache.get(mapping.feishuDocId);
             if (feishuDoc) {
-              // Check if content differs
-              if (this.hasContentChanged(file, feishuDoc, plainContent)) {
-                await this.feishu.updateDocument(feishuDocId, plainContent, title);
-                result.files.push(`Updated to Feishu: ${file.path}`);
+              const localModified = file.stat.mtime;
+              const remoteModified = feishuDoc.updatedTime;
+
+              // Check for conflicts
+              if (localModified > remoteModified && remoteModified > mapping.lastSynced) {
+                // Both modified — use configured strategy
+                if (this.settings.conflictStrategy === 'remote_wins') {
+                  result.files.push(`Skipped (remote wins): ${file.path}`);
+                  continue;
+                }
+                // keep_both and local_wins both proceed with local push
               }
+
+              // Push local changes
+              await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
+              result.files.push(`Updated to Feishu: ${file.path}`);
+              mapping.lastSynced = Date.now();
             } else {
-              // Doc not in cache, fetch and update
-              await this.feishu.updateDocument(feishuDocId, plainContent, title);
+              await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
               result.files.push(`Updated to Feishu: ${file.path}`);
             }
           } else {
-            // Check if doc with same title exists in Feishu
             const existingDoc = await this.feishu.findDocumentByTitle(title);
             if (existingDoc) {
-              // Update existing doc
               await this.feishu.updateDocument(existingDoc.docId, plainContent, title);
               this.updateMapping(file.path, existingDoc.docId);
               result.files.push(`Updated to Feishu: ${file.path}`);
             } else {
-              // Create new doc in Feishu
               const newDocId = await this.feishu.createDocument(title, plainContent);
               this.updateMapping(file.path, newDocId);
-              result.files.push(`Created in Feishu: ${file.path} → ${title}`);
+              result.files.push(`Created in Feishu: ${file.path}`);
             }
           }
         } catch (error) {
@@ -210,41 +393,14 @@ export class SyncManager {
     return result;
   }
 
-  private hasContentChanged(file: TFile, feishuDoc: FeishuDocInfo, plainContent: string): boolean {
-    // Simple check - in production you'd want better comparison
-    const localModified = file.stat.mtime;
-    const remoteModified = feishuDoc.updatedTime;
-    return Math.abs(localModified - remoteModified) > 60000; // 1 minute threshold
-  }
-
   // ==================== GitHub Sync ====================
+
   private async syncWithGitHub(): Promise<SyncResult> {
     const result: SyncResult = { success: true, direction: 'to-github', files: [], errors: [] };
 
     try {
-      // Pull from GitHub
-      await this.github.pull();
-
-      // Check for local changes and push
-      const files = this.app.vault.getFiles();
-      let hasChanges = false;
-
-      for (const file of files) {
-        if (!this.shouldSyncFile(file.path)) continue;
-        if (file.path.startsWith('Feishu/')) continue; // Skip Feishu folder
-
-        const localContent = await this.app.vault.read(file);
-        const githubContent = await this.github.getFileContent(file.path);
-
-        if (githubContent === null || localContent !== this.stripFrontmatter(githubContent)) {
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges) {
-        const commitResult = await this.github.sync();
-        result.files.push(`GitHub sync: ${commitResult.message}`);
-      }
+      const syncResult = await this.github.sync();
+      result.files.push(syncResult.message);
     } catch (error) {
       result.errors.push(`GitHub sync failed: ${error}`);
     }
@@ -252,21 +408,11 @@ export class SyncManager {
     return result;
   }
 
-  // ==================== File Change Handler ====================
-  async onFileChange(file: TFile): Promise<void> {
-    if (!this.shouldSyncFile(file.path)) return;
-    if (file.path.startsWith('Feishu/')) return; // Don't auto-sync Feishu folder files
-
-    if (this.syncTimeout) {
-      clearTimeout(this.syncTimeout);
-    }
-
-    this.syncTimeout = setTimeout(async () => {
-      await this.syncSingleFile(file);
-    }, this.debounceMs);
-  }
+  // ==================== Single File Sync ====================
 
   async syncSingleFile(file: TFile): Promise<void> {
+    if (this._syncLock) return;
+
     try {
       const content = await this.app.vault.read(file);
       const title = this.extractTitle(content, file.basename);
@@ -275,42 +421,81 @@ export class SyncManager {
       const mapping = this.mappings.get(file.path);
 
       if (mapping?.feishuDocId) {
-        // Update existing Feishu doc
         await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
       } else {
-        // Create new Feishu doc
-        const newDocId = await this.feishu.createDocument(title, plainContent);
-        this.updateMapping(file.path, newDocId);
+        const existingDoc = await this.feishu.findDocumentByTitle(title);
+        if (existingDoc) {
+          await this.feishu.updateDocument(existingDoc.docId, plainContent, title);
+          this.updateMapping(file.path, existingDoc.docId);
+        } else {
+          const newDocId = await this.feishu.createDocument(title, plainContent);
+          this.updateMapping(file.path, newDocId);
+        }
       }
     } catch (error) {
       console.error(`Failed to sync ${file.path}:`, error);
     }
   }
 
-  async onFileDelete(filePath: string): Promise<void> {
-    const mapping = this.mappings.get(filePath);
-    if (mapping?.feishuDocId) {
+  // ==================== Image Handling ====================
+
+  private async processFeishuImages(content: string): Promise<{ content: string; imageMap: Map<string, string> }> {
+    const imageMap = new Map<string, string>();
+    const attachmentFolder = this.settings.attachmentFolder || 'attachments/feishu';
+
+    // Find all Feishu image tokens: ![](<file_token>)
+    const imageRegex = /!\[\]\(([a-zA-Z0-9_\-]+)\)/g;
+    let match;
+    let processedContent = content;
+
+    while ((match = imageRegex.exec(content)) !== null) {
+      const fileToken = match[1];
+      const localFileName = `feishu_${fileToken}.png`;
+      const localPath = `${attachmentFolder}/${localFileName}`;
+
       try {
-        await this.feishu.deleteDocument(mapping.feishuDocId);
-        this.mappings.delete(filePath);
-      } catch (error) {
-        console.error(`Failed to delete Feishu doc ${mapping.feishuDocId}:`, error);
+        // Download image
+        await this.feishu.downloadImage(fileToken, localPath);
+        imageMap.set(fileToken, localPath);
+
+        // Replace Feishu URL with Obsidian wikilink
+        processedContent = processedContent.replace(
+          match[0],
+          `![[${localPath}]]`,
+        );
+      } catch (e) {
+        console.error(`Failed to download image ${fileToken}:`, e);
       }
+    }
+
+    return { content: processedContent, imageMap };
+  }
+
+  private async saveImageLocally(localPath: string, data: Uint8Array): Promise<void> {
+    const folder = localPath.substring(0, localPath.lastIndexOf('/'));
+    await this.ensureFolderExists(folder);
+    await this.app.vault.adapter.writeBinary(localPath, data.buffer as ArrayBuffer);
+  }
+
+  private async readImageLocally(localPath: string): Promise<Uint8Array | null> {
+    try {
+      const ab = await this.app.vault.adapter.readBinary(localPath);
+      return new Uint8Array(ab);
+    } catch {
+      return null;
     }
   }
 
   // ==================== Helpers ====================
+
   private shouldSyncFile(path: string): boolean {
     if (!this.settings.syncFolder) return true;
-    const normalizedPath = path.replace(/\\/g, '/');
-    return normalizedPath.startsWith(this.settings.syncFolder);
+    return path.startsWith(this.settings.syncFolder);
   }
 
   private findLocalPathByFeishu(docId: string): string | null {
     for (const [path, mapping] of this.mappings) {
-      if (mapping.feishuDocId === docId) {
-        return path;
-      }
+      if (mapping.feishuDocId === docId) return path;
     }
     return null;
   }
@@ -332,7 +517,6 @@ export class SyncManager {
   }
 
   private extractTitle(content: string, defaultTitle: string): string {
-    // Try to extract title from first H1
     const match = content.match(/^#\s+(.+)$/m);
     return match ? match[1].trim() : defaultTitle;
   }
@@ -362,19 +546,24 @@ last_synced: ${new Date().toISOString()}
     }
   }
 
+  // ==================== Mapping Access ====================
+
   getMappings(): DocumentMapping[] {
     return Array.from(this.mappings.values());
   }
 
-  addMapping(mapping: DocumentMapping): void {
-    this.mappings.set(mapping.localPath, mapping);
-  }
+  updateSettings(settings: SyncSettings): void {
+    this.settings = settings;
+    this.feishu = new FeishuService(settings.feishu);
 
-  removeMapping(localPath: string): void {
-    this.mappings.delete(localPath);
-  }
+    // Re-wire image callbacks
+    this.feishu.onImageDownloaded = async (localPath, data) => {
+      await this.saveImageLocally(localPath, data);
+    };
+    this.feishu.onImageRead = async (localPath) => {
+      return this.readImageLocally(localPath);
+    };
 
-  getMapping(filePath: string): DocumentMapping | undefined {
-    return this.mappings.get(filePath);
+    // GitHub service uses vaultAdapter which doesn't change
   }
 }

@@ -1,75 +1,218 @@
-import simpleGit, { SimpleGit } from 'simple-git';
-import { GitHubConfig } from '../types';
+import git from 'isomorphic-git';
+import { GitHubConfig, VaultFS } from '../types';
+import { VaultAdapter } from './VaultAdapter';
 
 export class GitHubService {
-  private git: SimpleGit;
   private config: GitHubConfig;
-  private vaultPath: string;
+  private fs: VaultFS;
+  private dir: string;
+  private _initialized = false;
 
-  constructor(config: GitHubConfig, vaultPath: string) {
+  constructor(config: GitHubConfig, vaultPath: string, vaultAdapter: VaultAdapter) {
     this.config = config;
-    this.vaultPath = vaultPath;
-    this.git = simpleGit(vaultPath);
-
-    this.git.addConfig('user.email', 'plugin@obsidian.feishu-sync');
-    this.git.addConfig('user.name', 'Feishu GitHub Sync Plugin');
+    this.dir = vaultPath;
+    this.fs = vaultAdapter.getFS();
   }
 
-  private async ensureAuth(): Promise<void> {
-    // Configure remote with token
-    const remoteUrl = `https://x-access-token:${this.config.token}@github.com/${this.config.owner}/${this.config.repo}.git`;
-    try {
-      await this.git.listRemote();
-    } catch {
-      // Remote not configured, add it
-      await this.git.addRemote('origin', remoteUrl);
-    }
-  }
+  // ---- Auth helper ----
 
-  async pull(): Promise<void> {
-    await this.ensureAuth();
-    await this.git.pull('origin', this.config.branch, { '--rebase': 'false' });
-  }
-
-  async push(): Promise<void> {
-    await this.ensureAuth();
-    const remoteUrl = `https://x-access-token:${this.config.token}@github.com/${this.config.owner}/${this.config.repo}.git`;
-    await this.git.remote(['set-url', 'origin', remoteUrl]);
-    await this.git.push('origin', this.config.branch, { '--set-upstream': null });
-  }
-
-  async commit(message: string): Promise<boolean> {
-    const status = await this.git.status();
-    if (status.files.length === 0) {
-      return false; // Nothing to commit
-    }
-
-    await this.git.add('.');
-    await this.git.commit(message);
-    return true;
-  }
-
-  async sync(): Promise<{ hasChanges: boolean; message: string }> {
-    await this.pull();
-
-    const status = await this.git.status();
-    const hasLocalChanges = status.files.length > 0;
-
-    if (hasLocalChanges) {
-      await this.commit(`Sync: ${new Date().toISOString()}`);
-    }
-
-    await this.push();
-
+  private getAuthUser(): { username: string; password: string } {
     return {
-      hasChanges: hasLocalChanges,
-      message: hasLocalChanges ? 'Synced with GitHub' : 'No changes to sync',
+      username: this.config.owner,
+      password: this.config.token,
     };
   }
 
+  // ---- Init ----
+
+  private async ensureInit(): Promise<void> {
+    if (this._initialized) return;
+
+    // Check if .git exists
+    const hasGitDir = await git.findRoot({ fs: this.fs, filepath: this.dir }).catch(() => null);
+
+    if (!hasGitDir) {
+      // Init new repo
+      await git.init({ fs: this.fs, dir: this.dir });
+    }
+
+    this._initialized = true;
+  }
+
+  // ---- Status ----
+
+  async getStatus(): Promise<{ files: { path: string; status: string }[] }> {
+    await this.ensureInit();
+    // Check for the remote first
+    const remotes = await git.listRemotes({ fs: this.fs, dir: this.dir });
+    const hasRemote = remotes.some(r => r.remote === 'origin');
+
+    if (!hasRemote && this.config.token && this.config.owner && this.config.repo) {
+      await git.addRemote({
+        fs: this.fs,
+        dir: this.dir,
+        remote: 'origin',
+        url: `https://github.com/${this.config.owner}/${this.config.repo}.git`,
+      });
+    }
+
+    const statusMatrix = await git.statusMatrix({ fs: this.fs, dir: this.dir });
+    const files = statusMatrix.map(([path, headStatus, workDirStatus]) => ({
+      path,
+      status: this.formatStatus(headStatus, workDirStatus),
+    }));
+
+    return { files };
+  }
+
+  private formatStatus(headStatus: number, workDirStatus: number): string {
+    if (headStatus === 0 && workDirStatus !== 0) return 'added';
+    if (headStatus !== 0 && workDirStatus === 0) return 'deleted';
+    if (headStatus !== workDirStatus) return 'modified';
+    return 'unchanged';
+  }
+
+  // ---- Clone (lazy) ----
+
+  async ensureCloneOrPull(): Promise<boolean> {
+    await this.ensureInit();
+
+    const hasCommits = await git.log({ fs: this.fs, dir: this.dir, depth: 1 }).then(l => l.length > 0).catch(() => false);
+
+    if (!hasCommits && this.config.owner && this.config.repo) {
+      // Try clone
+      try {
+        await git.clone({
+          fs: this.fs,
+          dir: this.dir,
+          url: `https://github.com/${this.config.owner}/${this.config.repo}.git`,
+          singleBranch: true,
+          depth: 1,
+          onAuth: () => this.getAuthUser(),
+        });
+        return true;
+      } catch (e: any) {
+        // Clone failed — might be empty repo, that's fine
+        if (!e.message?.includes('Empty') && !e.message?.includes('404')) {
+          throw e;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ---- Pull ----
+
+  async pull(): Promise<void> {
+    await this.ensureInit();
+
+    if (!this.config.owner || !this.config.repo) return;
+
+    try {
+      await git.pull({
+        fs: this.fs,
+        dir: this.dir,
+        ref: this.config.branch,
+        singleBranch: true,
+        onAuth: () => this.getAuthUser(),
+      });
+    } catch (e: any) {
+      // Silently ignore if no upstream yet
+      if (e.message?.includes('Remote URL not found') ||
+          e.message?.includes('No commits') ||
+          e.message?.includes('remote')?.toLowerCase()) {
+        return;
+      }
+      throw e;
+    }
+  }
+
+  // ---- Commit ----
+
+  async commit(message: string): Promise<boolean> {
+    await this.ensureInit();
+
+    // Stage all changes
+    const statusMatrix = await git.statusMatrix({ fs: this.fs, dir: this.dir });
+    let hasChanges = false;
+
+    for (const [filepath, head, workdir] of statusMatrix) {
+      if (head !== workdir) {
+        hasChanges = true;
+        // Stage the file
+        if (workdir === 0) {
+          // Deleted
+          await git.remove({ fs: this.fs, dir: this.dir, filepath });
+        } else {
+          // Added/modified
+          await git.add({ fs: this.fs, dir: this.dir, filepath });
+        }
+      }
+    }
+
+    if (!hasChanges) return false;
+
+    await git.commit({
+      fs: this.fs,
+      dir: this.dir,
+      message,
+      author: { name: 'Feishu GitHub Sync Plugin', email: 'plugin@obsidian.feishu-sync' },
+    });
+
+    return true;
+  }
+
+  // ---- Push ----
+
+  async push(): Promise<void> {
+    await this.ensureInit();
+
+    if (!this.config.owner || !this.config.repo || !this.config.token) {
+      throw new Error('GitHub not configured: missing owner, repo, or token');
+    }
+
+    await git.push({
+      fs: this.fs,
+      dir: this.dir,
+      remote: 'origin',
+      ref: this.config.branch,
+      onAuth: () => this.getAuthUser(),
+    });
+  }
+
+  // ---- Sync (pull + commit + push) ----
+
+  async sync(): Promise<{ hasChanges: boolean; message: string }> {
+    if (!this.config.owner || !this.config.repo || !this.config.token) {
+      return { hasChanges: false, message: 'GitHub not configured' };
+    }
+
+    await this.ensureCloneOrPull();
+    await this.pull();
+
+    const committed = await this.commit(`Sync: ${new Date().toISOString()}`);
+
+    if (committed) {
+      await this.push();
+    }
+
+    return {
+      hasChanges: committed,
+      message: committed ? 'Synced with GitHub' : 'No changes to sync',
+    };
+  }
+
+  // ---- File helpers ----
+
   async getFileContent(path: string): Promise<string | null> {
     try {
-      return await this.git.raw(['show', `${this.config.branch}:${path}`]);
+      const blob = await git.readBlob({
+        fs: this.fs,
+        dir: this.dir,
+        filepath: path,
+        ref: this.config.branch,
+      });
+      return new TextDecoder().decode(blob.blob);
     } catch {
       return null;
     }
@@ -77,26 +220,36 @@ export class GitHubService {
 
   async fileExists(path: string): Promise<boolean> {
     try {
-      await this.git.raw(['ls-files', '--error-unmatch', path]);
+      await git.readBlob({
+        fs: this.fs,
+        dir: this.dir,
+        filepath: path,
+        ref: this.config.branch,
+      });
       return true;
     } catch {
       return false;
     }
   }
 
-  async getLastModified(path: string): Promise<Date | null> {
-    try {
-      const log = await this.git.log({ file: path, maxCount: 1 });
-      if (log.latest) {
-        return new Date(log.latest.date);
-      }
-    } catch {
-      // File not in git history
-    }
-    return null;
+  async deleteFile(path: string): Promise<void> {
+    await git.remove({ fs: this.fs, dir: this.dir, filepath: path });
   }
 
-  async deleteFile(path: string): Promise<void> {
-    await this.git.rm(path);
+  async getLastModified(path: string): Promise<Date | null> {
+    try {
+      const log = await git.log({
+        fs: this.fs,
+        dir: this.dir,
+        filepath: path,
+        depth: 1,
+      });
+      if (log.length > 0) {
+        return new Date(log[0].commit.author.timestamp * 1000);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }
 }

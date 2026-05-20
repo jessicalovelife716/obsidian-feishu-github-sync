@@ -1,15 +1,11 @@
 {
   "name": "obsidian-feishu-github-sync",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Bidirectional sync between Obsidian, Feishu docs, and GitHub",
   "main": "main.js",
   "scripts": {
-    "build": "npm run build:main && npm run build:services",
-    "build:main": "esbuild main.ts --bundle --external:obsidian --external:electron --external:@electron/remote --outfile=main.js --format=cjs --platform=node",
-    "build:services": "esbuild src/services/SyncManager.ts src/services/FeishuService.ts src/services/GitHubService.ts src/types/index.ts --bundle --external:obsidian --external:electron --external:@electron/remote --outdir=./dist --format=cjs --platform=node",
-    "dev": "npm run build -- --watch",
-    "postbuild": "npm run copy-assets",
-    "copy-assets": "cp manifest.json dist/manifest.json 2>/dev/null || true"
+    "build": "esbuild main.ts --bundle --external:obsidian --outfile=main.js --format=cjs --platform=browser",
+    "dev": "npm run build -- --watch"
   },
   "keywords": ["obsidian", "feishu", "github", "sync"],
   "license": "MIT",
@@ -19,7 +15,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "obsidian": "^1.4.0",
-    "simple-git": "^3.22.0"
+    "isomorphic-git": "^1.25.0",
+    "obsidian": "^1.4.0"
   }
 }
