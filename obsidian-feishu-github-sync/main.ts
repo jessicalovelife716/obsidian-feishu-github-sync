@@ -1,4 +1,4 @@
-import { App, Plugin, TFile, TFolder, Notice, addIcon } from 'obsidian';
+import { App, Plugin, PluginSettingTab, TFile, TFolder, Notice } from 'obsidian';
 import { SyncManager } from './src/services/SyncManager';
 import { FeishuService } from './src/services/FeishuService';
 import { GitHubService } from './src/services/GitHubService';
@@ -577,16 +577,16 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
 
 // ==================== Settings Tab ====================
 
-class FeishuSyncSettingsTab {
-  private app: App;
+class FeishuSyncSettingsTab extends PluginSettingTab {
   private plugin: FeishuGitHubSyncPlugin;
 
   constructor(app: App, plugin: FeishuGitHubSyncPlugin) {
-    this.app = app;
+    super(app, plugin);
     this.plugin = plugin;
   }
 
-  display(containerEl: HTMLElement): void {
+  display(): void {
+    const containerEl = this.containerEl;
     containerEl.empty();
 
     const settings = this.plugin.getSettings();

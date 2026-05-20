@@ -22126,12 +22126,13 @@ Next sync: ${nextSync}`;
     });
   }
 };
-var FeishuSyncSettingsTab = class {
+var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
   constructor(app, plugin) {
-    this.app = app;
+    super(app, plugin);
     this.plugin = plugin;
   }
-  display(containerEl) {
+  display() {
+    const containerEl = this.containerEl;
     containerEl.empty();
     const settings = this.plugin.getSettings();
     containerEl.createEl("h2", { text: "Feishu GitHub Sync" });
