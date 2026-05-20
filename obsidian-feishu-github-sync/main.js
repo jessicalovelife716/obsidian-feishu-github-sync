@@ -21673,6 +21673,720 @@ var VaultAdapter = class {
   }
 };
 
+// src/i18n/en.ts
+var en_default = {
+  settings: {
+    auth: {
+      title: "Authentication",
+      feishuAppId: "Feishu App ID",
+      feishuAppSecret: "Feishu App Secret",
+      githubToken: "GitHub Personal Access Token",
+      githubRepo: "GitHub Repository",
+      securityWarning: "\u26A0\uFE0F <strong>Security reminder:</strong> Make sure your repository has a <code>.gitignore</code> that excludes <code>.obsidian/plugins/</code> and credential files. Otherwise your tokens may be exposed on GitHub."
+    },
+    automation: {
+      title: "Automation & Schedule",
+      enableSync: "Enable auto sync",
+      fileWatcher: "File change watcher",
+      syncOnStartup: "Sync on startup",
+      syncMode: "Sync mode",
+      off: "Off (manual only)",
+      interval: "Fixed interval",
+      cron: "Scheduled (cron)",
+      intervalMinutes: "Interval (minutes)",
+      cronExpression: "Cron expression",
+      cronHelp: 'Format: minute hour day-of-month month day-of-week. Example: "0 9 * * 1" = Monday 9:00 AM.'
+    },
+    scope: {
+      title: "Scope & Strategy",
+      syncFolder: "Sync folder (optional)",
+      syncFolderHelp: "Leave empty to sync the entire vault.",
+      attachmentFolder: "Attachment folder",
+      attachmentFolderHelp: "Local folder for images downloaded from Feishu.",
+      conflictStrategy: "Default conflict strategy",
+      keepBoth: "Keep both (create copy)",
+      localWins: "Local overwrites remote",
+      remoteWins: "Remote overwrites local",
+      statusBar: "Show status bar indicator"
+    },
+    buttons: {
+      save: "Save Settings",
+      syncNow: "Sync Now"
+    }
+  },
+  status: {
+    idle: "Idle",
+    syncing: "Syncing...",
+    error: "Error",
+    paused: "Paused",
+    nextSync: "Next sync"
+  },
+  notify: {
+    syncComplete: "Sync complete",
+    syncErrors: "errors",
+    syncFailed: "Sync failed",
+    pushComplete: "Pushed to GitHub",
+    pushFailed: "Push failed",
+    pullComplete: "Pulled from GitHub",
+    pullFailed: "Pull failed",
+    settingsSaved: "Settings saved",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu not configured. Open settings to set up.",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub not configured.",
+    fileSynced: "Synced",
+    syncPaused: "\u23F8\uFE0F Auto sync paused",
+    syncResumed: "\u25B6\uFE0F Auto sync resumed",
+    conflictCopy: "Conflict (kept both)",
+    noActiveFile: "No active file",
+    noChanges: "No changes to sync",
+    syncedToGithub: "Synced with GitHub",
+    syncInProgress: "Sync already in progress"
+  },
+  cmd: {
+    syncAll: "Sync All",
+    pushToGithub: "Push to GitHub",
+    pullFromGithub: "Pull from GitHub",
+    syncCurrentFile: "Sync current file to Feishu",
+    togglePause: "Pause/Resume Auto Sync"
+  },
+  plugin: {
+    description: "Bidirectional sync between Obsidian, Feishu Docs, and GitHub."
+  }
+};
+
+// src/i18n/zh-CN.ts
+var zh_CN_default = {
+  settings: {
+    auth: {
+      title: "\u8EAB\u4EFD\u8BA4\u8BC1",
+      feishuAppId: "\u98DE\u4E66 App ID",
+      feishuAppSecret: "\u98DE\u4E66 App Secret",
+      githubToken: "GitHub Personal Access Token",
+      githubRepo: "GitHub \u4ED3\u5E93",
+      securityWarning: "\u26A0\uFE0F <strong>\u5B89\u5168\u63D0\u9192\uFF1A</strong>\u8BF7\u786E\u4FDD\u4ED3\u5E93\u6839\u76EE\u5F55\u6709 <code>.gitignore</code> \u6587\u4EF6\uFF0C\u6392\u9664 <code>.obsidian/plugins/</code> \u548C\u51ED\u8BC1\u6587\u4EF6\uFF0C\u5426\u5219 Token \u53EF\u80FD\u88AB\u516C\u5F00\u5230 GitHub\u3002"
+    },
+    automation: {
+      title: "\u81EA\u52A8\u5316\u4E0E\u5B9A\u65F6\u540C\u6B65",
+      enableSync: "\u542F\u7528\u81EA\u52A8\u540C\u6B65",
+      fileWatcher: "\u6587\u4EF6\u53D8\u66F4\u76D1\u542C",
+      syncOnStartup: "\u542F\u52A8\u65F6\u540C\u6B65",
+      syncMode: "\u540C\u6B65\u6A21\u5F0F",
+      off: "\u5173\u95ED\uFF08\u4EC5\u624B\u52A8\uFF09",
+      interval: "\u56FA\u5B9A\u95F4\u9694",
+      cron: "\u5B9A\u65F6\u4EFB\u52A1 (Cron)",
+      intervalMinutes: "\u95F4\u9694\uFF08\u5206\u949F\uFF09",
+      cronExpression: "Cron \u8868\u8FBE\u5F0F",
+      cronHelp: '\u683C\u5F0F\uFF1A\u5206 \u65F6 \u65E5 \u6708 \u5468\u3002\u793A\u4F8B\uFF1A"0 9 * * 1" = \u6BCF\u5468\u4E00 09:00\u3002'
+    },
+    scope: {
+      title: "\u540C\u6B65\u8303\u56F4\u4E0E\u7B56\u7565",
+      syncFolder: "\u540C\u6B65\u6587\u4EF6\u5939\uFF08\u53EF\u9009\uFF09",
+      syncFolderHelp: "\u7559\u7A7A\u8868\u793A\u540C\u6B65\u6574\u4E2A Vault\u3002",
+      attachmentFolder: "\u9644\u4EF6\u4FDD\u5B58\u8DEF\u5F84",
+      attachmentFolderHelp: "\u4ECE\u98DE\u4E66\u4E0B\u8F7D\u7684\u56FE\u7247\u5B58\u50A8\u8DEF\u5F84\u3002",
+      conflictStrategy: "\u9ED8\u8BA4\u51B2\u7A81\u7B56\u7565",
+      keepBoth: "\u4FDD\u7559\u4E24\u8005\uFF08\u521B\u5EFA\u526F\u672C\uFF09",
+      localWins: "\u672C\u5730\u8986\u76D6\u8FDC\u7A0B",
+      remoteWins: "\u8FDC\u7A0B\u8986\u76D6\u672C\u5730",
+      statusBar: "\u663E\u793A\u72B6\u6001\u680F\u56FE\u6807"
+    },
+    buttons: {
+      save: "\u4FDD\u5B58\u8BBE\u7F6E",
+      syncNow: "\u7ACB\u5373\u540C\u6B65"
+    }
+  },
+  status: {
+    idle: "\u5DF2\u5C31\u7EEA",
+    syncing: "\u540C\u6B65\u4E2D...",
+    error: "\u9519\u8BEF",
+    paused: "\u5DF2\u6682\u505C",
+    nextSync: "\u4E0B\u6B21\u540C\u6B65"
+  },
+  notify: {
+    syncComplete: "\u540C\u6B65\u5B8C\u6210",
+    syncErrors: "\u4E2A\u9519\u8BEF",
+    syncFailed: "\u540C\u6B65\u5931\u8D25",
+    pushComplete: "\u5DF2\u63A8\u9001\u5230 GitHub",
+    pushFailed: "\u63A8\u9001\u5931\u8D25",
+    pullComplete: "\u5DF2\u4ECE GitHub \u62C9\u53D6",
+    pullFailed: "\u62C9\u53D6\u5931\u8D25",
+    settingsSaved: "\u8BBE\u7F6E\u5DF2\u4FDD\u5B58",
+    notConfiguredFeishu: "\u26A0\uFE0F \u98DE\u4E66\u672A\u914D\u7F6E\u3002\u8BF7\u6253\u5F00\u8BBE\u7F6E\u8FDB\u884C\u914D\u7F6E\u3002",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub \u672A\u914D\u7F6E\u3002",
+    fileSynced: "\u5DF2\u540C\u6B65",
+    syncPaused: "\u23F8\uFE0F \u81EA\u52A8\u540C\u6B65\u5DF2\u6682\u505C",
+    syncResumed: "\u25B6\uFE0F \u81EA\u52A8\u540C\u6B65\u5DF2\u6062\u590D",
+    conflictCopy: "\u51B2\u7A81\uFF08\u4FDD\u7559\u4E24\u8005\uFF09",
+    noActiveFile: "\u6CA1\u6709\u6253\u5F00\u7684\u6587\u6863",
+    noChanges: "\u65E0\u53D8\u66F4\u9700\u8981\u540C\u6B65",
+    syncedToGithub: "\u5DF2\u540C\u6B65\u5230 GitHub",
+    syncInProgress: "\u540C\u6B65\u6B63\u5728\u8FDB\u884C\u4E2D"
+  },
+  cmd: {
+    syncAll: "\u5B8C\u6574\u540C\u6B65",
+    pushToGithub: "\u63A8\u9001\u5230 GitHub",
+    pullFromGithub: "\u4ECE GitHub \u62C9\u53D6",
+    syncCurrentFile: "\u540C\u6B65\u5F53\u524D\u6587\u4EF6\u5230\u98DE\u4E66",
+    togglePause: "\u6682\u505C/\u6062\u590D\u81EA\u52A8\u540C\u6B65"
+  },
+  plugin: {
+    description: "Obsidian \xD7 \u98DE\u4E66\u6587\u6863 \xD7 GitHub \u4E09\u7AEF\u53CC\u5411\u540C\u6B65\u63D2\u4EF6\u3002"
+  }
+};
+
+// src/i18n/zh-TW.ts
+var zh_TW_default = {
+  settings: {
+    auth: {
+      title: "\u8EAB\u4EFD\u9A57\u8B49",
+      feishuAppId: "\u98DB\u66F8 App ID",
+      feishuAppSecret: "\u98DB\u66F8 App Secret",
+      githubToken: "GitHub Personal Access Token",
+      githubRepo: "GitHub \u5009\u5EAB",
+      securityWarning: "\u26A0\uFE0F <strong>\u5B89\u5168\u63D0\u9192\uFF1A</strong>\u8ACB\u78BA\u4FDD\u5009\u5EAB\u6839\u76EE\u9304\u6709 <code>.gitignore</code> \u6A94\u6848\uFF0C\u6392\u9664 <code>.obsidian/plugins/</code> \u548C\u6191\u8B49\u6A94\u6848\uFF0C\u5426\u5247 Token \u53EF\u80FD\u88AB\u516C\u958B\u5230 GitHub\u3002"
+    },
+    automation: {
+      title: "\u81EA\u52D5\u5316\u8207\u6392\u7A0B\u540C\u6B65",
+      enableSync: "\u555F\u7528\u81EA\u52D5\u540C\u6B65",
+      fileWatcher: "\u6A94\u6848\u8B8A\u66F4\u76E3\u807D",
+      syncOnStartup: "\u555F\u52D5\u6642\u540C\u6B65",
+      syncMode: "\u540C\u6B65\u6A21\u5F0F",
+      off: "\u95DC\u9589\uFF08\u50C5\u624B\u52D5\uFF09",
+      interval: "\u56FA\u5B9A\u9593\u9694",
+      cron: "\u6392\u7A0B\u4EFB\u52D9 (Cron)",
+      intervalMinutes: "\u9593\u9694\uFF08\u5206\u9418\uFF09",
+      cronExpression: "Cron \u8868\u9054\u5F0F",
+      cronHelp: '\u683C\u5F0F\uFF1A\u5206 \u6642 \u65E5 \u6708 \u9031\u3002\u7BC4\u4F8B\uFF1A"0 9 * * 1" = \u6BCF\u9031\u4E00 09:00\u3002'
+    },
+    scope: {
+      title: "\u540C\u6B65\u7BC4\u570D\u8207\u7B56\u7565",
+      syncFolder: "\u540C\u6B65\u8CC7\u6599\u593E\uFF08\u9078\u586B\uFF09",
+      syncFolderHelp: "\u7559\u7A7A\u8868\u793A\u540C\u6B65\u6574\u500B Vault\u3002",
+      attachmentFolder: "\u9644\u4EF6\u5132\u5B58\u8DEF\u5F91",
+      attachmentFolderHelp: "\u5F9E\u98DB\u66F8\u4E0B\u8F09\u7684\u5716\u7247\u5132\u5B58\u8DEF\u5F91\u3002",
+      conflictStrategy: "\u9810\u8A2D\u885D\u7A81\u7B56\u7565",
+      keepBoth: "\u4FDD\u7559\u5169\u8005\uFF08\u5EFA\u7ACB\u526F\u672C\uFF09",
+      localWins: "\u672C\u5730\u8986\u84CB\u9060\u7AEF",
+      remoteWins: "\u9060\u7AEF\u8986\u84CB\u672C\u5730",
+      statusBar: "\u986F\u793A\u72C0\u614B\u5217\u5716\u793A"
+    },
+    buttons: {
+      save: "\u5132\u5B58\u8A2D\u5B9A",
+      syncNow: "\u7ACB\u5373\u540C\u6B65"
+    }
+  },
+  status: {
+    idle: "\u5C31\u7DD2",
+    syncing: "\u540C\u6B65\u4E2D...",
+    error: "\u932F\u8AA4",
+    paused: "\u5DF2\u66AB\u505C",
+    nextSync: "\u4E0B\u6B21\u540C\u6B65"
+  },
+  notify: {
+    syncComplete: "\u540C\u6B65\u5B8C\u6210",
+    syncErrors: "\u500B\u932F\u8AA4",
+    syncFailed: "\u540C\u6B65\u5931\u6557",
+    pushComplete: "\u5DF2\u63A8\u9001\u5230 GitHub",
+    pushFailed: "\u63A8\u9001\u5931\u6557",
+    pullComplete: "\u5DF2\u5F9E GitHub \u62C9\u53D6",
+    pullFailed: "\u62C9\u53D6\u5931\u6557",
+    settingsSaved: "\u8A2D\u5B9A\u5DF2\u5132\u5B58",
+    notConfiguredFeishu: "\u26A0\uFE0F \u98DB\u66F8\u672A\u8A2D\u5B9A\u3002\u8ACB\u958B\u555F\u8A2D\u5B9A\u9032\u884C\u8A2D\u5B9A\u3002",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub \u672A\u8A2D\u5B9A\u3002",
+    fileSynced: "\u5DF2\u540C\u6B65",
+    syncPaused: "\u23F8\uFE0F \u81EA\u52D5\u540C\u6B65\u5DF2\u66AB\u505C",
+    syncResumed: "\u25B6\uFE0F \u81EA\u52D5\u540C\u6B65\u5DF2\u6062\u5FA9",
+    conflictCopy: "\u885D\u7A81\uFF08\u4FDD\u7559\u5169\u8005\uFF09",
+    noActiveFile: "\u6C92\u6709\u958B\u555F\u7684\u6587\u4EF6",
+    noChanges: "\u7121\u8B8A\u66F4\u9700\u8981\u540C\u6B65",
+    syncedToGithub: "\u5DF2\u540C\u6B65\u5230 GitHub",
+    syncInProgress: "\u540C\u6B65\u6B63\u5728\u9032\u884C\u4E2D"
+  },
+  cmd: {
+    syncAll: "\u5B8C\u6574\u540C\u6B65",
+    pushToGithub: "\u63A8\u9001\u5230 GitHub",
+    pullFromGithub: "\u5F9E GitHub \u62C9\u53D6",
+    syncCurrentFile: "\u540C\u6B65\u7576\u524D\u6587\u4EF6\u5230\u98DB\u66F8",
+    togglePause: "\u66AB\u505C/\u6062\u5FA9\u81EA\u52D5\u540C\u6B65"
+  },
+  plugin: {
+    description: "Obsidian \xD7 \u98DB\u66F8\u6587\u4EF6 \xD7 GitHub \u4E09\u7AEF\u96D9\u5411\u540C\u6B65\u63D2\u4EF6\u3002"
+  }
+};
+
+// src/i18n/es.ts
+var es_default = {
+  settings: {
+    auth: {
+      title: "Autenticaci\xF3n",
+      feishuAppId: "ID de App de Feishu",
+      feishuAppSecret: "Secreto de App de Feishu",
+      githubToken: "Token Personal de Acceso de GitHub",
+      githubRepo: "Repositorio de GitHub",
+      securityWarning: "\u26A0\uFE0F <strong>Recordatorio de seguridad:</strong> Aseg\xFArate de que tu repositorio tenga un <code>.gitignore</code> que excluya <code>.obsidian/plugins/</code> y archivos de credenciales. De lo contrario, tus tokens podr\xEDan quedar expuestos en GitHub."
+    },
+    automation: {
+      title: "Automatizaci\xF3n y Programaci\xF3n",
+      enableSync: "Activar sincronizaci\xF3n autom\xE1tica",
+      fileWatcher: "Vigilancia de cambios",
+      syncOnStartup: "Sincronizar al inicio",
+      syncMode: "Modo de sincronizaci\xF3n",
+      off: "Apagado (solo manual)",
+      interval: "Intervalo fijo",
+      cron: "Programado (cron)",
+      intervalMinutes: "Intervalo (minutos)",
+      cronExpression: "Expresi\xF3n cron",
+      cronHelp: 'Formato: minuto hora d\xEDa-mes mes d\xEDa-semana. Ej: "0 9 * * 1" = Lunes 9:00 AM.'
+    },
+    scope: {
+      title: "Alcance y Estrategia",
+      syncFolder: "Carpeta de sincronizaci\xF3n (opcional)",
+      syncFolderHelp: "Dejar vac\xEDo para sincronizar toda la b\xF3veda.",
+      attachmentFolder: "Carpeta de adjuntos",
+      attachmentFolderHelp: "Carpeta local para im\xE1genes descargadas de Feishu.",
+      conflictStrategy: "Estrategia de conflictos",
+      keepBoth: "Conservar ambos (crear copia)",
+      localWins: "Local sobrescribe remoto",
+      remoteWins: "Remoto sobrescribe local",
+      statusBar: "Mostrar indicador en barra de estado"
+    },
+    buttons: {
+      save: "Guardar configuraci\xF3n",
+      syncNow: "Sincronizar ahora"
+    }
+  },
+  status: {
+    idle: "Inactivo",
+    syncing: "Sincronizando...",
+    error: "Error",
+    paused: "En pausa",
+    nextSync: "Pr\xF3xima sincronizaci\xF3n"
+  },
+  notify: {
+    syncComplete: "Sincronizaci\xF3n completada",
+    syncErrors: "errores",
+    syncFailed: "Sincronizaci\xF3n fallida",
+    pushComplete: "Subido a GitHub",
+    pushFailed: "Subida fallida",
+    pullComplete: "Descargado de GitHub",
+    pullFailed: "Descarga fallida",
+    settingsSaved: "Configuraci\xF3n guardada",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu no configurado. Abre configuraci\xF3n.",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub no configurado.",
+    fileSynced: "Sincronizado",
+    syncPaused: "\u23F8\uFE0F Sincronizaci\xF3n autom\xE1tica pausada",
+    syncResumed: "\u25B6\uFE0F Sincronizaci\xF3n autom\xE1tica reanudada",
+    conflictCopy: "Conflicto (conservados ambos)",
+    noActiveFile: "No hay archivo activo",
+    noChanges: "Sin cambios para sincronizar",
+    syncedToGithub: "Sincronizado con GitHub",
+    syncInProgress: "Sincronizaci\xF3n ya en curso"
+  },
+  cmd: {
+    syncAll: "Sincronizar todo",
+    pushToGithub: "Subir a GitHub",
+    pullFromGithub: "Descargar de GitHub",
+    syncCurrentFile: "Sincronizar archivo actual a Feishu",
+    togglePause: "Pausar/Reanudar sincronizaci\xF3n"
+  },
+  plugin: {
+    description: "Sincronizaci\xF3n bidireccional entre Obsidian, Feishu Docs y GitHub."
+  }
+};
+
+// src/i18n/fr.ts
+var fr_default = {
+  settings: {
+    auth: {
+      title: "Authentification",
+      feishuAppId: "ID d'application Feishu",
+      feishuAppSecret: "Secret d'application Feishu",
+      githubToken: "Token d'acc\xE8s personnel GitHub",
+      githubRepo: "D\xE9p\xF4t GitHub",
+      securityWarning: "\u26A0\uFE0F <strong>Rappel de s\xE9curit\xE9 :</strong> Assurez-vous que votre d\xE9p\xF4t contient un <code>.gitignore</code> excluant <code>.obsidian/plugins/</code> et les fichiers d'identifiants. Sinon, vos tokens pourraient \xEAtre expos\xE9s sur GitHub."
+    },
+    automation: {
+      title: "Automatisation et Planification",
+      enableSync: "Activer la synchronisation automatique",
+      fileWatcher: "Surveillance des fichiers",
+      syncOnStartup: "Synchroniser au d\xE9marrage",
+      syncMode: "Mode de synchronisation",
+      off: "D\xE9sactiv\xE9 (manuel uniquement)",
+      interval: "Intervalle fixe",
+      cron: "Planifi\xE9 (cron)",
+      intervalMinutes: "Intervalle (minutes)",
+      cronExpression: "Expression cron",
+      cronHelp: 'Format : minute heure jour-mois mois jour-semaine. Ex : "0 9 * * 1" = Lundi 9h00.'
+    },
+    scope: {
+      title: "Port\xE9e et Strat\xE9gie",
+      syncFolder: "Dossier de synchronisation (optionnel)",
+      syncFolderHelp: "Laisser vide pour synchroniser tout le coffre.",
+      attachmentFolder: "Dossier des pi\xE8ces jointes",
+      attachmentFolderHelp: "Dossier local pour les images t\xE9l\xE9charg\xE9es depuis Feishu.",
+      conflictStrategy: "Strat\xE9gie de conflit",
+      keepBoth: "Conserver les deux (copie)",
+      localWins: "Local \xE9crase distant",
+      remoteWins: "Distant \xE9crase local",
+      statusBar: "Afficher l'indicateur dans la barre d'\xE9tat"
+    },
+    buttons: {
+      save: "Enregistrer",
+      syncNow: "Synchroniser"
+    }
+  },
+  status: {
+    idle: "Inactif",
+    syncing: "Synchronisation...",
+    error: "Erreur",
+    paused: "En pause",
+    nextSync: "Prochaine synchronisation"
+  },
+  notify: {
+    syncComplete: "Synchronisation termin\xE9e",
+    syncErrors: "erreurs",
+    syncFailed: "\xC9chec de la synchronisation",
+    pushComplete: "Pouss\xE9 vers GitHub",
+    pushFailed: "\xC9chec de la pouss\xE9e",
+    pullComplete: "Tir\xE9 de GitHub",
+    pullFailed: "\xC9chec du tirage",
+    settingsSaved: "Param\xE8tres enregistr\xE9s",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu non configur\xE9. Ouvrir les param\xE8tres.",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub non configur\xE9.",
+    fileSynced: "Synchronis\xE9",
+    syncPaused: "\u23F8\uFE0F Synchronisation automatique en pause",
+    syncResumed: "\u25B6\uFE0F Synchronisation automatique reprise",
+    conflictCopy: "Conflit (conserv\xE9 les deux)",
+    noActiveFile: "Aucun fichier actif",
+    noChanges: "Aucun changement \xE0 synchroniser",
+    syncedToGithub: "Synchronis\xE9 avec GitHub",
+    syncInProgress: "Synchronisation d\xE9j\xE0 en cours"
+  },
+  cmd: {
+    syncAll: "Tout synchroniser",
+    pushToGithub: "Pousser vers GitHub",
+    pullFromGithub: "Tirer de GitHub",
+    syncCurrentFile: "Synchroniser le fichier actuel vers Feishu",
+    togglePause: "Pause/Reprise auto-sync"
+  },
+  plugin: {
+    description: "Synchronisation bidirectionnelle entre Obsidian, Feishu Docs et GitHub."
+  }
+};
+
+// src/i18n/ru.ts
+var ru_default = {
+  settings: {
+    auth: {
+      title: "\u0410\u0443\u0442\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0446\u0438\u044F",
+      feishuAppId: "App ID Feishu",
+      feishuAppSecret: "App Secret Feishu",
+      githubToken: "\u041B\u0438\u0447\u043D\u044B\u0439 \u0442\u043E\u043A\u0435\u043D \u0434\u043E\u0441\u0442\u0443\u043F\u0430 GitHub",
+      githubRepo: "\u0420\u0435\u043F\u043E\u0437\u0438\u0442\u043E\u0440\u0438\u0439 GitHub",
+      securityWarning: "\u26A0\uFE0F <strong>\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u043E \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438:</strong> \u0423\u0431\u0435\u0434\u0438\u0442\u0435\u0441\u044C, \u0447\u0442\u043E \u0432 \u0432\u0430\u0448\u0435\u043C \u0440\u0435\u043F\u043E\u0437\u0438\u0442\u043E\u0440\u0438\u0438 \u0435\u0441\u0442\u044C <code>.gitignore</code>, \u0438\u0441\u043A\u043B\u044E\u0447\u0430\u044E\u0449\u0438\u0439 <code>.obsidian/plugins/</code> \u0438 \u0444\u0430\u0439\u043B\u044B \u0441 \u0443\u0447\u0435\u0442\u043D\u044B\u043C\u0438 \u0434\u0430\u043D\u043D\u044B\u043C\u0438. \u0418\u043D\u0430\u0447\u0435 \u0442\u043E\u043A\u0435\u043D\u044B \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u0440\u0430\u0441\u043A\u0440\u044B\u0442\u044B \u043D\u0430 GitHub."
+    },
+    automation: {
+      title: "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u044F \u0438 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435",
+      enableSync: "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E",
+      fileWatcher: "\u041E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439",
+      syncOnStartup: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u043F\u0440\u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0435",
+      syncMode: "\u0420\u0435\u0436\u0438\u043C \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438",
+      off: "\u0412\u044B\u043A\u043B (\u0442\u043E\u043B\u044C\u043A\u043E \u0432\u0440\u0443\u0447\u043D\u0443\u044E)",
+      interval: "\u0424\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0439 \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B",
+      cron: "\u041F\u043E \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u044E (cron)",
+      intervalMinutes: "\u0418\u043D\u0442\u0435\u0440\u0432\u0430\u043B (\u043C\u0438\u043D\u0443\u0442\u044B)",
+      cronExpression: "Cron-\u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u0435",
+      cronHelp: '\u0424\u043E\u0440\u043C\u0430\u0442: \u043C\u0438\u043D\u0443\u0442\u0430 \u0447\u0430\u0441 \u0434\u0435\u043D\u044C-\u043C\u0435\u0441\u044F\u0446 \u043C\u0435\u0441\u044F\u0446 \u0434\u0435\u043D\u044C-\u043D\u0435\u0434\u0435\u043B\u0438. \u041F\u0440\u0438\u043C\u0435\u0440: "0 9 * * 1" = \u041F\u043D 9:00.'
+    },
+    scope: {
+      title: "\u041E\u0431\u043B\u0430\u0441\u0442\u044C \u0438 \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044F",
+      syncFolder: "\u041F\u0430\u043F\u043A\u0430 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)",
+      syncFolderHelp: "\u041E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043F\u0443\u0441\u0442\u044B\u043C \u0434\u043B\u044F \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438 \u0432\u0441\u0435\u0433\u043E \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430.",
+      attachmentFolder: "\u041F\u0430\u043F\u043A\u0430 \u0432\u043B\u043E\u0436\u0435\u043D\u0438\u0439",
+      attachmentFolderHelp: "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u0430\u044F \u043F\u0430\u043F\u043A\u0430 \u0434\u043B\u044F \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u0439 \u0438\u0437 Feishu.",
+      conflictStrategy: "\u0421\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044F \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0438\u044F \u043A\u043E\u043D\u0444\u043B\u0438\u043A\u0442\u043E\u0432",
+      keepBoth: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043E\u0431\u0430 (\u0441\u043E\u0437\u0434\u0430\u0442\u044C \u043A\u043E\u043F\u0438\u044E)",
+      localWins: "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F \u0432\u0430\u0436\u043D\u0435\u0435",
+      remoteWins: "\u0423\u0434\u0430\u043B\u0435\u043D\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F \u0432\u0430\u0436\u043D\u0435\u0435",
+      statusBar: "\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0438\u043D\u0434\u0438\u043A\u0430\u0442\u043E\u0440 \u0432 \u0441\u0442\u0440\u043E\u043A\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u044F"
+    },
+    buttons: {
+      save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+      syncNow: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C"
+    }
+  },
+  status: {
+    idle: "\u041E\u0436\u0438\u0434\u0430\u043D\u0438\u0435",
+    syncing: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F...",
+    error: "\u041E\u0448\u0438\u0431\u043A\u0430",
+    paused: "\u041F\u0440\u0438\u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E",
+    nextSync: "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0430\u044F \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F"
+  },
+  notify: {
+    syncComplete: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430",
+    syncErrors: "\u043E\u0448\u0438\u0431\u043E\u043A",
+    syncFailed: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u043D\u0435 \u0443\u0434\u0430\u043B\u0430\u0441\u044C",
+    pushComplete: "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E \u043D\u0430 GitHub",
+    pushFailed: "\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 \u043D\u0435 \u0443\u0434\u0430\u043B\u0430\u0441\u044C",
+    pullComplete: "\u0417\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u043E \u0441 GitHub",
+    pullFailed: "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043D\u0435 \u0443\u0434\u0430\u043B\u0430\u0441\u044C",
+    settingsSaved: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu \u043D\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub \u043D\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D.",
+    fileSynced: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
+    syncPaused: "\u23F8\uFE0F \u0410\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u043F\u0440\u0438\u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430",
+    syncResumed: "\u25B6\uFE0F \u0410\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0432\u043E\u0437\u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0430",
+    conflictCopy: "\u041A\u043E\u043D\u0444\u043B\u0438\u043A\u0442 (\u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043E\u0431\u0430)",
+    noActiveFile: "\u041D\u0435\u0442 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430",
+    noChanges: "\u041D\u0435\u0442 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439 \u0434\u043B\u044F \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438",
+    syncedToGithub: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u043D\u043E \u0441 GitHub",
+    syncInProgress: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0443\u0436\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F"
+  },
+  cmd: {
+    syncAll: "\u041F\u043E\u043B\u043D\u0430\u044F \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F",
+    pushToGithub: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043D\u0430 GitHub",
+    pullFromGithub: "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0441 GitHub",
+    syncCurrentFile: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u0444\u0430\u0439\u043B \u0432 Feishu",
+    togglePause: "\u041F\u0430\u0443\u0437\u0430/\u0412\u043E\u0437\u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E"
+  },
+  plugin: {
+    description: "\u0414\u0432\u0443\u043D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u0430\u044F \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u043C\u0435\u0436\u0434\u0443 Obsidian, Feishu Docs \u0438 GitHub."
+  }
+};
+
+// src/i18n/hi.ts
+var hi_default = {
+  settings: {
+    auth: {
+      title: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923",
+      feishuAppId: "Feishu \u0910\u092A ID",
+      feishuAppSecret: "Feishu \u0910\u092A \u0938\u0940\u0915\u094D\u0930\u0947\u091F",
+      githubToken: "GitHub \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u0917\u0924 \u090F\u0915\u094D\u0938\u0947\u0938 \u091F\u094B\u0915\u0928",
+      githubRepo: "GitHub \u0930\u093F\u092A\u0949\u091C\u093F\u091F\u0930\u0940",
+      securityWarning: "\u26A0\uFE0F <strong>\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0905\u0928\u0941\u0938\u094D\u092E\u093E\u0930\u0915:</strong> \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A\u0915\u0947 \u0930\u093F\u092A\u0949\u091C\u093F\u091F\u0930\u0940 \u092E\u0947\u0902 <code>.gitignore</code> \u0939\u0948 \u091C\u094B <code>.obsidian/plugins/</code> \u0914\u0930 \u0915\u094D\u0930\u0947\u0921\u0947\u0902\u0936\u093F\u092F\u0932 \u092B\u093C\u093E\u0907\u0932\u094B\u0902 \u0915\u094B \u092C\u093E\u0939\u0930 \u0915\u0930\u0924\u093E \u0939\u0948\u0964 \u0905\u0928\u094D\u092F\u0925\u093E \u0906\u092A\u0915\u0947 \u091F\u094B\u0915\u0928 GitHub \u092A\u0930 \u0938\u093E\u0930\u094D\u0935\u091C\u0928\u093F\u0915 \u0939\u094B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+    },
+    automation: {
+      title: "\u0938\u094D\u0935\u091A\u093E\u0932\u0928 \u0914\u0930 \u0905\u0928\u0941\u0938\u0942\u091A\u0940",
+      enableSync: "\u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0938\u093F\u0902\u0915 \u0938\u0915\u094D\u0937\u092E \u0915\u0930\u0947\u0902",
+      fileWatcher: "\u092B\u093C\u093E\u0907\u0932 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u0928\u093F\u0917\u0930\u093E\u0928\u0940",
+      syncOnStartup: "\u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0905\u092A \u092A\u0930 \u0938\u093F\u0902\u0915 \u0915\u0930\u0947\u0902",
+      syncMode: "\u0938\u093F\u0902\u0915 \u092E\u094B\u0921",
+      off: "\u092C\u0902\u0926 (\u0915\u0947\u0935\u0932 \u092E\u0948\u0928\u094D\u092F\u0941\u0905\u0932)",
+      interval: "\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0905\u0902\u0924\u0930\u093E\u0932",
+      cron: "\u0905\u0928\u0941\u0938\u0942\u091A\u093F\u0924 (cron)",
+      intervalMinutes: "\u0905\u0902\u0924\u0930\u093E\u0932 (\u092E\u093F\u0928\u091F)",
+      cronExpression: "Cron \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0936\u0928",
+      cronHelp: '\u092A\u094D\u0930\u093E\u0930\u0942\u092A: \u092E\u093F\u0928\u091F \u0918\u0902\u091F\u093E \u0926\u093F\u0928-\u092E\u0939\u0940\u0928\u093E \u092E\u0939\u0940\u0928\u093E \u0926\u093F\u0928-\u0938\u092A\u094D\u0924\u093E\u0939\u0964 \u0909\u0926\u093E: "0 9 * * 1" = \u0938\u094B\u092E\u0935\u093E\u0930 \u0938\u0941\u092C\u0939 9:00 \u092C\u091C\u0947\u0964'
+    },
+    scope: {
+      title: "\u0926\u093E\u092F\u0930\u093E \u0914\u0930 \u0930\u0923\u0928\u0940\u0924\u093F",
+      syncFolder: "\u0938\u093F\u0902\u0915 \u092B\u093C\u094B\u0932\u094D\u0921\u0930 (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+      syncFolderHelp: "\u092A\u0942\u0930\u0947 Vault \u0915\u094B \u0938\u093F\u0902\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0916\u093E\u0932\u0940 \u091B\u094B\u0921\u093C\u0947\u0902\u0964",
+      attachmentFolder: "\u0905\u091F\u0948\u091A\u092E\u0947\u0902\u091F \u092B\u093C\u094B\u0932\u094D\u0921\u0930",
+      attachmentFolderHelp: "Feishu \u0938\u0947 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0940 \u0917\u0908 \u091B\u0935\u093F\u092F\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u092B\u093C\u094B\u0932\u094D\u0921\u0930\u0964",
+      conflictStrategy: "\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0938\u0902\u0918\u0930\u094D\u0937 \u0930\u0923\u0928\u0940\u0924\u093F",
+      keepBoth: "\u0926\u094B\u0928\u094B\u0902 \u0930\u0916\u0947\u0902 (\u092A\u094D\u0930\u0924\u093F\u0932\u093F\u092A\u093F \u092C\u0928\u093E\u090F\u0902)",
+      localWins: "\u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0926\u0942\u0930\u0938\u094D\u0925 \u0915\u094B \u0913\u0935\u0930\u0930\u093E\u0907\u091F \u0915\u0930\u0924\u093E \u0939\u0948",
+      remoteWins: "\u0926\u0942\u0930\u0938\u094D\u0925 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0915\u094B \u0913\u0935\u0930\u0930\u093E\u0907\u091F \u0915\u0930\u0924\u093E \u0939\u0948",
+      statusBar: "\u0938\u094D\u091F\u0947\u091F\u0938 \u092C\u093E\u0930 \u0907\u0902\u0921\u093F\u0915\u0947\u091F\u0930 \u0926\u093F\u0916\u093E\u090F\u0902"
+    },
+    buttons: {
+      save: "\u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0938\u0939\u0947\u091C\u0947\u0902",
+      syncNow: "\u0905\u092D\u0940 \u0938\u093F\u0902\u0915 \u0915\u0930\u0947\u0902"
+    }
+  },
+  status: {
+    idle: "\u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F",
+    syncing: "\u0938\u093F\u0902\u0915 \u0939\u094B \u0930\u0939\u093E \u0939\u0948...",
+    error: "\u0924\u094D\u0930\u0941\u091F\u093F",
+    paused: "\u0930\u094B\u0915\u093E \u0917\u092F\u093E",
+    nextSync: "\u0905\u0917\u0932\u093E \u0938\u093F\u0902\u0915"
+  },
+  notify: {
+    syncComplete: "\u0938\u093F\u0902\u0915 \u092A\u0942\u0930\u094D\u0923",
+    syncErrors: "\u0924\u094D\u0930\u0941\u091F\u093F\u092F\u093E\u0901",
+    syncFailed: "\u0938\u093F\u0902\u0915 \u0935\u093F\u092B\u0932",
+    pushComplete: "GitHub \u092A\u0930 \u092D\u0947\u091C\u093E \u0917\u092F\u093E",
+    pushFailed: "\u092D\u0947\u091C\u0928\u093E \u0935\u093F\u092B\u0932",
+    pullComplete: "GitHub \u0938\u0947 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u093F\u092F\u093E \u0917\u092F\u093E",
+    pullFailed: "\u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u093E \u0935\u093F\u092B\u0932",
+    settingsSaved: "\u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0938\u0939\u0947\u091C\u0940 \u0917\u0908\u0902",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0916\u094B\u0932\u0947\u0902\u0964",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964",
+    fileSynced: "\u0938\u093F\u0902\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E",
+    syncPaused: "\u23F8\uFE0F \u0911\u091F\u094B \u0938\u093F\u0902\u0915 \u0930\u094B\u0915\u093E \u0917\u092F\u093E",
+    syncResumed: "\u25B6\uFE0F \u0911\u091F\u094B \u0938\u093F\u0902\u0915 \u092B\u093F\u0930 \u0938\u0947 \u0936\u0941\u0930\u0942",
+    conflictCopy: "\u0938\u0902\u0918\u0930\u094D\u0937 (\u0926\u094B\u0928\u094B\u0902 \u0930\u0916\u0947 \u0917\u090F)",
+    noActiveFile: "\u0915\u094B\u0908 \u0938\u0915\u094D\u0930\u093F\u092F \u092B\u093C\u093E\u0907\u0932 \u0928\u0939\u0940\u0902",
+    noChanges: "\u0938\u093F\u0902\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u094B\u0908 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u0928\u0939\u0940\u0902",
+    syncedToGithub: "GitHub \u0938\u0947 \u0938\u093F\u0902\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E",
+    syncInProgress: "\u0938\u093F\u0902\u0915 \u092A\u0939\u0932\u0947 \u0938\u0947 \u091A\u0932 \u0930\u0939\u093E \u0939\u0948"
+  },
+  cmd: {
+    syncAll: "\u092A\u0942\u0930\u094D\u0923 \u0938\u093F\u0902\u0915",
+    pushToGithub: "GitHub \u092A\u0930 \u092D\u0947\u091C\u0947\u0902",
+    pullFromGithub: "GitHub \u0938\u0947 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902",
+    syncCurrentFile: "\u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092B\u093C\u093E\u0907\u0932 \u0915\u094B Feishu \u092E\u0947\u0902 \u0938\u093F\u0902\u0915 \u0915\u0930\u0947\u0902",
+    togglePause: "\u0911\u091F\u094B \u0938\u093F\u0902\u0915 \u0930\u094B\u0915\u0947\u0902/\u091C\u093E\u0930\u0940 \u0930\u0916\u0947\u0902"
+  },
+  plugin: {
+    description: "Obsidian, Feishu Docs \u0914\u0930 GitHub \u0915\u0947 \u092C\u0940\u091A \u0926\u094D\u0935\u093F\u0926\u093F\u0936 \u0938\u093F\u0902\u0915\u094D\u0930\u094B\u0928\u093E\u0907\u091C\u093C\u0947\u0936\u0928\u0964"
+  }
+};
+
+// src/i18n/ar.ts
+var ar_default = {
+  settings: {
+    auth: {
+      title: "\u0627\u0644\u0645\u0635\u0627\u062F\u0642\u0629",
+      feishuAppId: "\u0645\u0639\u0631\u0641 \u062A\u0637\u0628\u064A\u0642 Feishu",
+      feishuAppSecret: "\u0633\u0631 \u062A\u0637\u0628\u064A\u0642 Feishu",
+      githubToken: "\u0631\u0645\u0632 \u0627\u0644\u0648\u0635\u0648\u0644 \u0627\u0644\u0634\u062E\u0635\u064A \u0644\u0640 GitHub",
+      githubRepo: "\u0645\u0633\u062A\u0648\u062F\u0639 GitHub",
+      securityWarning: "\u26A0\uFE0F <strong>\u062A\u0630\u0643\u064A\u0631 \u0623\u0645\u0646\u064A:</strong> \u062A\u0623\u0643\u062F \u0645\u0646 \u0648\u062C\u0648\u062F \u0645\u0644\u0641 <code>.gitignore</code> \u0641\u064A \u0645\u0633\u062A\u0648\u062F\u0639\u0643 \u064A\u0633\u062A\u062B\u0646\u064A <code>.obsidian/plugins/</code> \u0648\u0645\u0644\u0641\u0627\u062A \u0627\u0644\u0627\u0639\u062A\u0645\u0627\u062F\u064A\u0627\u062A. \u0648\u0625\u0644\u0627 \u0641\u0642\u062F \u064A\u062A\u0645 \u0643\u0634\u0641 \u0631\u0645\u0648\u0632\u0643 \u0639\u0644\u0649 GitHub."
+    },
+    automation: {
+      title: "\u0627\u0644\u0623\u062A\u0645\u062A\u0629 \u0648\u0627\u0644\u062C\u062F\u0648\u0644\u0629",
+      enableSync: "\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629",
+      fileWatcher: "\u0645\u0631\u0627\u0642\u0628\u0629 \u062A\u063A\u064A\u064A\u0631\u0627\u062A \u0627\u0644\u0645\u0644\u0641\u0627\u062A",
+      syncOnStartup: "\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0639\u0646\u062F \u0628\u062F\u0621 \u0627\u0644\u062A\u0634\u063A\u064A\u0644",
+      syncMode: "\u0648\u0636\u0639 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+      off: "\u0625\u064A\u0642\u0627\u0641 (\u064A\u062F\u0648\u064A \u0641\u0642\u0637)",
+      interval: "\u0641\u0627\u0635\u0644 \u0632\u0645\u0646\u064A \u062B\u0627\u0628\u062A",
+      cron: "\u0645\u062C\u062F\u0648\u0644 (cron)",
+      intervalMinutes: "\u0627\u0644\u0641\u0627\u0635\u0644 \u0627\u0644\u0632\u0645\u0646\u064A (\u062F\u0642\u0627\u0626\u0642)",
+      cronExpression: "\u062A\u0639\u0628\u064A\u0631 Cron",
+      cronHelp: '\u0627\u0644\u062A\u0646\u0633\u064A\u0642: \u062F\u0642\u064A\u0642\u0629 \u0633\u0627\u0639\u0629 \u064A\u0648\u0645-\u0634\u0647\u0631 \u0634\u0647\u0631 \u064A\u0648\u0645-\u0623\u0633\u0628\u0648\u0639. \u0645\u062B\u0627\u0644: "0 9 * * 1" = \u0627\u0644\u0627\u062B\u0646\u064A\u0646 9:00 \u0635\u0628\u0627\u062D\u0627\u064B.'
+    },
+    scope: {
+      title: "\u0627\u0644\u0646\u0637\u0627\u0642 \u0648\u0627\u0644\u0627\u0633\u062A\u0631\u0627\u062A\u064A\u062C\u064A\u0629",
+      syncFolder: "\u0645\u062C\u0644\u062F \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 (\u0627\u062E\u062A\u064A\u0627\u0631\u064A)",
+      syncFolderHelp: "\u0627\u062A\u0631\u0643\u0647 \u0641\u0627\u0631\u063A\u0627\u064B \u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062E\u0632\u0646\u0629 \u0628\u0627\u0644\u0643\u0627\u0645\u0644.",
+      attachmentFolder: "\u0645\u062C\u0644\u062F \u0627\u0644\u0645\u0631\u0641\u0642\u0627\u062A",
+      attachmentFolderHelp: "\u0627\u0644\u0645\u062C\u0644\u062F \u0627\u0644\u0645\u062D\u0644\u064A \u0644\u0644\u0635\u0648\u0631 \u0627\u0644\u062A\u064A \u062A\u0645 \u062A\u0646\u0632\u064A\u0644\u0647\u0627 \u0645\u0646 Feishu.",
+      conflictStrategy: "\u0627\u0633\u062A\u0631\u0627\u062A\u064A\u062C\u064A\u0629 \u0627\u0644\u062A\u0639\u0627\u0631\u0636 \u0627\u0644\u0627\u0641\u062A\u0631\u0627\u0636\u064A\u0629",
+      keepBoth: "\u0627\u0644\u0627\u062D\u062A\u0641\u0627\u0638 \u0628\u0643\u0644\u064A\u0647\u0645\u0627 (\u0625\u0646\u0634\u0627\u0621 \u0646\u0633\u062E\u0629)",
+      localWins: "\u0627\u0644\u0645\u062D\u0644\u064A \u064A\u0633\u062A\u0628\u062F\u0644 \u0627\u0644\u0628\u0639\u064A\u062F",
+      remoteWins: "\u0627\u0644\u0628\u0639\u064A\u062F \u064A\u0633\u062A\u0628\u062F\u0644 \u0627\u0644\u0645\u062D\u0644\u064A",
+      statusBar: "\u0625\u0638\u0647\u0627\u0631 \u0645\u0624\u0634\u0631 \u0634\u0631\u064A\u0637 \u0627\u0644\u062D\u0627\u0644\u0629"
+    },
+    buttons: {
+      save: "\u062D\u0641\u0638 \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
+      syncNow: "\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0622\u0646"
+    }
+  },
+  status: {
+    idle: "\u062E\u0627\u0645\u0644",
+    syncing: "\u062C\u0627\u0631\u064D \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629...",
+    error: "\u062E\u0637\u0623",
+    paused: "\u0645\u062A\u0648\u0642\u0641 \u0645\u0624\u0642\u062A\u0627\u064B",
+    nextSync: "\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0627\u0644\u064A\u0629"
+  },
+  notify: {
+    syncComplete: "\u0627\u0643\u062A\u0645\u0644\u062A \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+    syncErrors: "\u0623\u062E\u0637\u0627\u0621",
+    syncFailed: "\u0641\u0634\u0644\u062A \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+    pushComplete: "\u062A\u0645 \u0627\u0644\u062F\u0641\u0639 \u0625\u0644\u0649 GitHub",
+    pushFailed: "\u0641\u0634\u0644 \u0627\u0644\u062F\u0641\u0639",
+    pullComplete: "\u062A\u0645 \u0627\u0644\u0633\u062D\u0628 \u0645\u0646 GitHub",
+    pullFailed: "\u0641\u0634\u0644 \u0627\u0644\u0633\u062D\u0628",
+    settingsSaved: "\u062A\u0645 \u062D\u0641\u0638 \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
+    notConfiguredFeishu: "\u26A0\uFE0F Feishu \u063A\u064A\u0631 \u0645\u0647\u064A\u0623. \u0627\u0641\u062A\u062D \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A.",
+    notConfiguredGithub: "\u26A0\uFE0F GitHub \u063A\u064A\u0631 \u0645\u0647\u064A\u0623.",
+    fileSynced: "\u062A\u0645\u062A \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+    syncPaused: "\u23F8\uFE0F \u062A\u0645 \u0625\u064A\u0642\u0627\u0641 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629",
+    syncResumed: "\u25B6\uFE0F \u062A\u0645 \u0627\u0633\u062A\u0626\u0646\u0627\u0641 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629",
+    conflictCopy: "\u062A\u0639\u0627\u0631\u0636 (\u062A\u0645 \u0627\u0644\u0627\u062D\u062A\u0641\u0627\u0638 \u0628\u0643\u0644\u064A\u0647\u0645\u0627)",
+    noActiveFile: "\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0644\u0641 \u0646\u0634\u0637",
+    noChanges: "\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u063A\u064A\u064A\u0631\u0627\u062A \u0644\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+    syncedToGithub: "\u062A\u0645\u062A \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0645\u0639 GitHub",
+    syncInProgress: "\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0642\u064A\u062F \u0627\u0644\u062A\u0634\u063A\u064A\u0644 \u0628\u0627\u0644\u0641\u0639\u0644"
+  },
+  cmd: {
+    syncAll: "\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0643\u0644",
+    pushToGithub: "\u062F\u0641\u0639 \u0625\u0644\u0649 GitHub",
+    pullFromGithub: "\u0633\u062D\u0628 \u0645\u0646 GitHub",
+    syncCurrentFile: "\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u062D\u0627\u0644\u064A \u0625\u0644\u0649 Feishu",
+    togglePause: "\u0625\u064A\u0642\u0627\u0641/\u0627\u0633\u062A\u0626\u0646\u0627\u0641 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629"
+  },
+  plugin: {
+    description: "\u0645\u0632\u0627\u0645\u0646\u0629 \u062B\u0646\u0627\u0626\u064A\u0629 \u0627\u0644\u0627\u062A\u062C\u0627\u0647 \u0628\u064A\u0646 Obsidian \u0648Feishu Docs \u0648GitHub."
+  }
+};
+
+// src/i18n/index.ts
+var DICTIONARIES = {
+  en: en_default,
+  "zh-CN": zh_CN_default,
+  "zh-TW": zh_TW_default,
+  es: es_default,
+  fr: fr_default,
+  ru: ru_default,
+  hi: hi_default,
+  ar: ar_default
+};
+var FALLBACK = "en";
+function resolveLocale(raw) {
+  const code = raw.replace(/_/g, "-");
+  if (code in DICTIONARIES)
+    return code;
+  const lang = code.split("-")[0];
+  switch (lang) {
+    case "zh": {
+      const region = code.split("-")[1] || "";
+      if (region === "TW" || region === "HK" || region === "MO")
+        return "zh-TW";
+      return "zh-CN";
+    }
+    case "es":
+      return "es";
+    case "fr":
+      return "fr";
+    case "ru":
+      return "ru";
+    case "hi":
+      return "hi";
+    case "ar":
+      return "ar";
+    default:
+      return FALLBACK;
+  }
+}
+function resolveKey(dict, path) {
+  const keys = path.split(".");
+  let val = dict;
+  for (const k of keys) {
+    if (val === void 0 || val === null)
+      return path;
+    val = val[k];
+  }
+  return typeof val === "string" ? val : path;
+}
+var I18n = class {
+  constructor() {
+    const raw = typeof navigator !== "undefined" ? navigator.language || "en" : "en";
+    this.locale = resolveLocale(raw);
+    this.dict = DICTIONARIES[this.locale] || DICTIONARIES[FALLBACK];
+  }
+  /** Get the resolved locale code. */
+  getLocale() {
+    return this.locale;
+  }
+  /** Is the current locale right-to-left? */
+  isRTL() {
+    return this.locale === "ar";
+  }
+  /** Translate a dot-separated key. */
+  t(path) {
+    return resolveKey(this.dict, path);
+  }
+  /** Re-init with a specific locale (useful for testing or manual override). */
+  setLocale(locale) {
+    this.locale = locale;
+    this.dict = DICTIONARIES[locale] || DICTIONARIES[FALLBACK];
+  }
+};
+var i18n = new I18n();
+
 // main.ts
 var CredentialStore = class {
   static {
@@ -21824,22 +22538,22 @@ var FeishuGitHubSyncPlugin = class extends import_obsidian2.Plugin {
   registerCommands() {
     this.addCommand({
       id: "sync-all",
-      name: "Sync All",
+      name: i18n.t("cmd.syncAll"),
       callback: () => this.syncAll()
     });
     this.addCommand({
       id: "push-to-github",
-      name: "Push to GitHub",
+      name: i18n.t("cmd.pushToGithub"),
       callback: () => this.pushToGitHub()
     });
     this.addCommand({
       id: "pull-from-github",
-      name: "Pull from GitHub",
+      name: i18n.t("cmd.pullFromGithub"),
       callback: () => this.pullFromGitHub()
     });
     this.addCommand({
       id: "sync-current-file",
-      name: "Sync current file to Feishu",
+      name: i18n.t("cmd.syncCurrentFile"),
       callback: () => this.syncCurrentFile(),
       checkCallback: (checking) => {
         const activeFile = this.app.workspace.getActiveFile();
@@ -21852,7 +22566,7 @@ var FeishuGitHubSyncPlugin = class extends import_obsidian2.Plugin {
     });
     this.addCommand({
       id: "toggle-pause",
-      name: "Pause/Resume Auto Sync",
+      name: i18n.t("cmd.togglePause"),
       callback: () => this.togglePause()
     });
   }
@@ -21884,7 +22598,7 @@ var FeishuGitHubSyncPlugin = class extends import_obsidian2.Plugin {
     this.statusBarItem.style.display = "flex";
     this.statusBarItem.style.alignItems = "center";
     this.statusBarItem.style.gap = "4px";
-    this.statusBarItem.title = "Feishu GitHub Sync \u2014 Idle";
+    this.statusBarItem.title = `Feishu GitHub Sync \u2014 ${i18n.t("status.idle")}`;
     this.statusBarItem.addEventListener("click", () => {
       const status2 = this.syncManager.status;
       if (status2 === "error") {
@@ -21909,10 +22623,10 @@ var FeishuGitHubSyncPlugin = class extends import_obsidian2.Plugin {
     };
     this.statusBarItem.innerHTML = iconMap[status2] || STATUS_ICONS.idle;
     const labelMap = {
-      idle: "Idle",
-      syncing: "Syncing...",
-      error: message ? `Error: ${message}` : "Error",
-      paused: "Paused"
+      idle: i18n.t("status.idle"),
+      syncing: i18n.t("status.syncing"),
+      error: message ? `${i18n.t("status.error")}: ${message}` : i18n.t("status.error"),
+      paused: i18n.t("status.paused")
     };
     this.statusBarItem.title = `Feishu GitHub Sync \u2014 ${labelMap[status2]}`;
   }
@@ -21995,12 +22709,12 @@ Next sync: ${nextSync}`;
   // ==================== Public Sync Methods ====================
   async syncAll() {
     if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-      new import_obsidian2.Notice("\u26A0\uFE0F Feishu not configured. Open settings to set up.");
+      new import_obsidian2.Notice(i18n.t("notify.notConfiguredFeishu"));
       return;
     }
     try {
       const result = await this.syncManager.syncAll();
-      const summary = `Sync: ${result.files.length} files, ${result.errors.length} errors`;
+      const summary = `${i18n.t("notify.syncComplete")}: ${result.files.length} files, ${result.errors.length} ${i18n.t("notify.syncErrors")}`;
       if (result.errors.length > 0) {
         new import_obsidian2.Notice(`\u26A0\uFE0F ${summary}`);
       } else {
@@ -22008,63 +22722,63 @@ Next sync: ${nextSync}`;
       }
       this.savePluginData();
     } catch (error) {
-      new import_obsidian2.Notice(`\u274C Sync failed: ${error}`);
+      new import_obsidian2.Notice(`\u274C ${i18n.t("notify.syncFailed")}: ${error}`);
     }
   }
   async pushToGitHub() {
     if (!this.settings.github.token || !this.settings.github.owner) {
-      new import_obsidian2.Notice("\u26A0\uFE0F GitHub not configured. Open settings to set up.");
+      new import_obsidian2.Notice(i18n.t("notify.notConfiguredGithub"));
       return;
     }
     try {
       const result = await this.syncManager.pushToGitHub();
       if (result.errors.length > 0) {
-        new import_obsidian2.Notice(`\u26A0\uFE0F Push errors: ${result.errors.join(", ")}`);
+        new import_obsidian2.Notice(`\u26A0\uFE0F ${i18n.t("notify.pushFailed")}: ${result.errors.join(", ")}`);
       } else {
-        new import_obsidian2.Notice(`\u2705 ${result.files.join(", ")}`);
+        new import_obsidian2.Notice(`\u2705 ${i18n.t("notify.pushComplete")}`);
       }
     } catch (error) {
-      new import_obsidian2.Notice(`\u274C Push failed: ${error}`);
+      new import_obsidian2.Notice(`\u274C ${i18n.t("notify.pushFailed")}: ${error}`);
     }
   }
   async pullFromGitHub() {
     if (!this.settings.github.token || !this.settings.github.owner) {
-      new import_obsidian2.Notice("\u26A0\uFE0F GitHub not configured.");
+      new import_obsidian2.Notice(i18n.t("notify.notConfiguredGithub"));
       return;
     }
     try {
       const result = await this.syncManager.pullFromGitHub();
       if (result.errors.length > 0) {
-        new import_obsidian2.Notice(`\u26A0\uFE0F Pull errors: ${result.errors.join(", ")}`);
+        new import_obsidian2.Notice(`\u26A0\uFE0F ${i18n.t("notify.pullFailed")}: ${result.errors.join(", ")}`);
       } else {
-        new import_obsidian2.Notice(`\u2705 Pulled from GitHub`);
+        new import_obsidian2.Notice(`\u2705 ${i18n.t("notify.pullComplete")}`);
       }
     } catch (error) {
-      new import_obsidian2.Notice(`\u274C Pull failed: ${error}`);
+      new import_obsidian2.Notice(`\u274C ${i18n.t("notify.pullFailed")}: ${error}`);
     }
   }
   async syncCurrentFile() {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new import_obsidian2.Notice("No active file");
+      new import_obsidian2.Notice(i18n.t("notify.noActiveFile"));
       return;
     }
     try {
       await this.syncManager.syncSingleFile(activeFile);
-      new import_obsidian2.Notice(`\u2705 Synced: ${activeFile.basename}`);
+      new import_obsidian2.Notice(`\u2705 ${i18n.t("notify.fileSynced")}: ${activeFile.basename}`);
     } catch (error) {
-      new import_obsidian2.Notice(`\u274C Sync failed: ${error}`);
+      new import_obsidian2.Notice(`\u274C ${i18n.t("notify.syncFailed")}: ${error}`);
     }
   }
   togglePause() {
     this.paused = !this.paused;
     if (this.paused) {
       this.stopScheduler();
-      this.syncManager["setStatus"]("paused", "Auto sync paused");
-      new import_obsidian2.Notice("\u23F8\uFE0F Auto sync paused");
+      this.syncManager["setStatus"]("paused", i18n.t("status.paused"));
+      new import_obsidian2.Notice(i18n.t("notify.syncPaused"));
     } else {
       this.startScheduler();
-      new import_obsidian2.Notice("\u25B6\uFE0F Auto sync resumed");
+      new import_obsidian2.Notice(i18n.t("notify.syncResumed"));
     }
   }
   // ==================== Settings Access ====================
@@ -22136,22 +22850,23 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
     containerEl.empty();
     const settings = this.plugin.getSettings();
     containerEl.createEl("h2", { text: "Feishu GitHub Sync" });
+    containerEl.createEl("h2", { text: "Feishu GitHub Sync" });
     containerEl.createEl("p", {
-      text: "Bidirectional sync between Obsidian, Feishu Docs, and GitHub.",
+      text: i18n.t("plugin.description"),
       attr: { style: "color: var(--text-muted); margin-bottom: 24px;" }
     });
-    this.renderSection(containerEl, "Authentication", (section) => {
-      this.renderTextInput(section, "Feishu App ID", settings.feishu.appId, "cli_xxx", (v) => {
+    this.renderSection(containerEl, i18n.t("settings.auth.title"), (section) => {
+      this.renderTextInput(section, i18n.t("settings.auth.feishuAppId"), settings.feishu.appId, "cli_xxx", (v) => {
         settings.feishu.appId = v;
       });
-      this.renderPasswordInput(section, "Feishu App Secret", settings.feishu.appSecret, "App Secret", (v) => {
+      this.renderPasswordInput(section, i18n.t("settings.auth.feishuAppSecret"), settings.feishu.appSecret, "App Secret", (v) => {
         settings.feishu.appSecret = v;
       });
       section.createEl("hr", { attr: { style: "margin: 12px 0;" } });
-      this.renderPasswordInput(section, "GitHub Personal Access Token", settings.github.token, "ghp_xxx", (v) => {
+      this.renderPasswordInput(section, i18n.t("settings.auth.githubToken"), settings.github.token, "ghp_xxx", (v) => {
         settings.github.token = v;
       });
-      this.renderTextInput(section, "GitHub Repository", `${settings.github.owner}/${settings.github.repo}`, "owner/repo", (v) => {
+      this.renderTextInput(section, i18n.t("settings.auth.githubRepo"), `${settings.github.owner}/${settings.github.repo}`, "owner/repo", (v) => {
         const parts = v.split("/");
         settings.github.owner = parts[0] || "";
         settings.github.repo = parts[1] || "";
@@ -22161,28 +22876,28 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
           style: "background: var(--background-modifier-warning); color: var(--text-warning); padding: 10px; border-radius: 6px; font-size: 12px; margin-top: 8px;"
         }
       });
-      warnDiv.innerHTML = "\u26A0\uFE0F <strong>Security reminder:</strong> Make sure your repository has a <code>.gitignore</code> that excludes <code>.obsidian/plugins/</code> and credential files. Otherwise your tokens may be exposed on GitHub.";
+      warnDiv.innerHTML = i18n.t("settings.auth.securityWarning");
     });
-    this.renderSection(containerEl, "Automation & Schedule", (section) => {
-      this.renderToggle(section, "Enable auto sync", settings.enabled, (v) => {
+    this.renderSection(containerEl, i18n.t("settings.automation.title"), (section) => {
+      this.renderToggle(section, i18n.t("settings.automation.enableSync"), settings.enabled, (v) => {
         settings.enabled = v;
       });
-      this.renderToggle(section, "File change watcher", settings.fileWatcherEnabled, (v) => {
+      this.renderToggle(section, i18n.t("settings.automation.fileWatcher"), settings.fileWatcherEnabled, (v) => {
         settings.fileWatcherEnabled = v;
       });
-      this.renderToggle(section, "Sync on startup", settings.syncOnStartup, (v) => {
+      this.renderToggle(section, i18n.t("settings.automation.syncOnStartup"), settings.syncOnStartup, (v) => {
         settings.syncOnStartup = v;
       });
       const modeLabel = section.createEl("label");
-      modeLabel.createSpan({ text: "Sync mode" });
+      modeLabel.createSpan({ text: i18n.t("settings.automation.syncMode") });
       const modeSelect = modeLabel.createEl("select");
       modeSelect.style.display = "block";
       modeSelect.style.marginTop = "4px";
       modeSelect.style.marginBottom = "8px";
       const modes = [
-        { value: "off", label: "Off (manual only)" },
-        { value: "interval", label: "Fixed interval" },
-        { value: "cron", label: "Scheduled (cron)" }
+        { value: "off", label: i18n.t("settings.automation.off") },
+        { value: "interval", label: i18n.t("settings.automation.interval") },
+        { value: "cron", label: i18n.t("settings.automation.cron") }
       ];
       for (const m of modes) {
         const opt = modeSelect.createEl("option", { value: m.value });
@@ -22192,16 +22907,16 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
       }
       const intervalContainer = section.createEl("div");
       intervalContainer.style.display = settings.syncMode === "interval" ? "block" : "none";
-      this.renderNumberInput(intervalContainer, "Interval (minutes)", settings.intervalMinutes, 1, 1440, (v) => {
+      this.renderNumberInput(intervalContainer, i18n.t("settings.automation.intervalMinutes"), settings.intervalMinutes, 1, 1440, (v) => {
         settings.intervalMinutes = v;
       });
       const cronContainer = section.createEl("div");
       cronContainer.style.display = settings.syncMode === "cron" ? "block" : "none";
-      this.renderTextInput(cronContainer, "Cron expression", settings.cronExpression, "0 9 * * 1", (v) => {
+      this.renderTextInput(cronContainer, i18n.t("settings.automation.cronExpression"), settings.cronExpression, "0 9 * * 1", (v) => {
         settings.cronExpression = v;
       });
       cronContainer.createEl("p", {
-        text: 'Format: minute hour day-of-month month day-of-week. Example: "0 9 * * 1" = Monday 9:00 AM.',
+        text: i18n.t("settings.automation.cronHelp"),
         attr: { style: "font-size: 11px; color: var(--text-faint); margin-top: 2px;" }
       });
       modeSelect.addEventListener("change", () => {
@@ -22210,31 +22925,31 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
         cronContainer.style.display = settings.syncMode === "cron" ? "block" : "none";
       });
     });
-    this.renderSection(containerEl, "Scope & Strategy", (section) => {
-      this.renderTextInput(section, "Sync folder (optional)", settings.syncFolder, "FeishuSync/", (v) => {
+    this.renderSection(containerEl, i18n.t("settings.scope.title"), (section) => {
+      this.renderTextInput(section, i18n.t("settings.scope.syncFolder"), settings.syncFolder, "FeishuSync/", (v) => {
         settings.syncFolder = v;
       });
       section.createEl("p", {
-        text: "Leave empty to sync the entire vault.",
+        text: i18n.t("settings.scope.syncFolderHelp"),
         attr: { style: "font-size: 11px; color: var(--text-faint); margin-top: -6px; margin-bottom: 10px;" }
       });
-      this.renderTextInput(section, "Attachment folder", settings.attachmentFolder, "attachments/feishu", (v) => {
+      this.renderTextInput(section, i18n.t("settings.scope.attachmentFolder"), settings.attachmentFolder, "attachments/feishu", (v) => {
         settings.attachmentFolder = v;
       });
       section.createEl("p", {
-        text: "Local folder for images downloaded from Feishu.",
+        text: i18n.t("settings.scope.attachmentFolderHelp"),
         attr: { style: "font-size: 11px; color: var(--text-faint); margin-top: -6px; margin-bottom: 10px;" }
       });
       const conflictLabel = section.createEl("label");
-      conflictLabel.createSpan({ text: "Default conflict strategy" });
+      conflictLabel.createSpan({ text: i18n.t("settings.scope.conflictStrategy") });
       const conflictSelect = conflictLabel.createEl("select");
       conflictSelect.style.display = "block";
       conflictSelect.style.marginTop = "4px";
       conflictSelect.style.marginBottom = "8px";
       const strategies = [
-        { value: "keep_both", label: "Keep both (create copy)" },
-        { value: "local_wins", label: "Local overwrites remote" },
-        { value: "remote_wins", label: "Remote overwrites local" }
+        { value: "keep_both", label: i18n.t("settings.scope.keepBoth") },
+        { value: "local_wins", label: i18n.t("settings.scope.localWins") },
+        { value: "remote_wins", label: i18n.t("settings.scope.remoteWins") }
       ];
       for (const s of strategies) {
         const opt = conflictSelect.createEl("option", { value: s.value });
@@ -22245,7 +22960,7 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
       conflictSelect.addEventListener("change", () => {
         settings.conflictStrategy = conflictSelect.value;
       });
-      this.renderToggle(section, "Show status bar indicator", settings.showStatusBar, (v) => {
+      this.renderToggle(section, i18n.t("settings.scope.statusBar"), settings.showStatusBar, (v) => {
         settings.showStatusBar = v;
       });
     });
@@ -22253,13 +22968,13 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
     btnContainer.style.display = "flex";
     btnContainer.style.gap = "8px";
     btnContainer.style.marginTop = "20px";
-    const saveBtn = btnContainer.createEl("button", { text: "Save Settings" });
+    const saveBtn = btnContainer.createEl("button", { text: i18n.t("settings.buttons.save") });
     saveBtn.style.cssText = "padding: 8px 20px; background: var(--interactive-accent); color: var(--text-on-accent); border: none; border-radius: 6px; cursor: pointer; font-size: 14px;";
-    const syncBtn = btnContainer.createEl("button", { text: "Sync Now" });
+    const syncBtn = btnContainer.createEl("button", { text: i18n.t("settings.buttons.syncNow") });
     syncBtn.style.cssText = "padding: 8px 20px; background: var(--interactive-success); color: var(--text-on-accent); border: none; border-radius: 6px; cursor: pointer; font-size: 14px;";
     saveBtn.addEventListener("click", () => {
       this.plugin.updateSettings(settings);
-      new import_obsidian2.Notice("Settings saved");
+      new import_obsidian2.Notice(i18n.t("notify.settingsSaved"));
     });
     syncBtn.addEventListener("click", () => {
       this.plugin.syncAll();

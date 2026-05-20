@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, TFile, TFolder, Notice } from 'obsidian';
+import { App, Plugin, PluginSettingTab, TFile, Notice } from 'obsidian';
 import { SyncManager } from './src/services/SyncManager';
 import { FeishuService } from './src/services/FeishuService';
 import { GitHubService } from './src/services/GitHubService';
@@ -6,11 +6,11 @@ import { VaultAdapter } from './src/services/VaultAdapter';
 import {
   SyncSettings,
   DocumentMapping,
-  SyncResult,
   SyncStatus,
   SyncMode,
   ConflictStrategy,
 } from './src/types';
+import { i18n } from './src/i18n';
 
 // ==================== Encryption (simple XOR + Base64 for local obfuscation) ====================
 
@@ -204,25 +204,25 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: 'sync-all',
-      name: 'Sync All',
+      name: i18n.t('cmd.syncAll'),
       callback: () => this.syncAll(),
     });
 
     this.addCommand({
       id: 'push-to-github',
-      name: 'Push to GitHub',
+      name: i18n.t('cmd.pushToGithub'),
       callback: () => this.pushToGitHub(),
     });
 
     this.addCommand({
       id: 'pull-from-github',
-      name: 'Pull from GitHub',
+      name: i18n.t('cmd.pullFromGithub'),
       callback: () => this.pullFromGitHub(),
     });
 
     this.addCommand({
       id: 'sync-current-file',
-      name: 'Sync current file to Feishu',
+      name: i18n.t('cmd.syncCurrentFile'),
       callback: () => this.syncCurrentFile(),
       checkCallback: (checking: boolean) => {
         const activeFile = this.app.workspace.getActiveFile();
@@ -234,7 +234,7 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
 
     this.addCommand({
       id: 'toggle-pause',
-      name: 'Pause/Resume Auto Sync',
+      name: i18n.t('cmd.togglePause'),
       callback: () => this.togglePause(),
     });
   }
@@ -273,7 +273,7 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
     this.statusBarItem.style.display = 'flex';
     this.statusBarItem.style.alignItems = 'center';
     this.statusBarItem.style.gap = '4px';
-    this.statusBarItem.title = 'Feishu GitHub Sync — Idle';
+    this.statusBarItem.title = `Feishu GitHub Sync — ${i18n.t('status.idle')}`;
 
     // Click to show next sync time
     this.statusBarItem.addEventListener('click', () => {
@@ -306,10 +306,10 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
     this.statusBarItem.innerHTML = iconMap[status] || STATUS_ICONS.idle;
 
     const labelMap: Record<SyncStatus, string> = {
-      idle: 'Idle',
-      syncing: 'Syncing...',
-      error: message ? `Error: ${message}` : 'Error',
-      paused: 'Paused',
+      idle: i18n.t('status.idle'),
+      syncing: i18n.t('status.syncing'),
+      error: message ? `${i18n.t('status.error')}: ${message}` : i18n.t('status.error'),
+      paused: i18n.t('status.paused'),
     };
 
     this.statusBarItem.title = `Feishu GitHub Sync — ${labelMap[status]}`;
@@ -415,13 +415,13 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
 
   async syncAll(): Promise<void> {
     if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-      new Notice('⚠️ Feishu not configured. Open settings to set up.');
+      new Notice(i18n.t('notify.notConfiguredFeishu'));
       return;
     }
 
     try {
       const result = await this.syncManager.syncAll();
-      const summary = `Sync: ${result.files.length} files, ${result.errors.length} errors`;
+      const summary = `${i18n.t('notify.syncComplete')}: ${result.files.length} files, ${result.errors.length} ${i18n.t('notify.syncErrors')}`;
       if (result.errors.length > 0) {
         new Notice(`⚠️ ${summary}`);
       } else {
@@ -429,58 +429,58 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
       }
       this.savePluginData();
     } catch (error) {
-      new Notice(`❌ Sync failed: ${error}`);
+      new Notice(`❌ ${i18n.t('notify.syncFailed')}: ${error}`);
     }
   }
 
   async pushToGitHub(): Promise<void> {
     if (!this.settings.github.token || !this.settings.github.owner) {
-      new Notice('⚠️ GitHub not configured. Open settings to set up.');
+      new Notice(i18n.t('notify.notConfiguredGithub'));
       return;
     }
 
     try {
       const result = await this.syncManager.pushToGitHub();
       if (result.errors.length > 0) {
-        new Notice(`⚠️ Push errors: ${result.errors.join(', ')}`);
+        new Notice(`⚠️ ${i18n.t('notify.pushFailed')}: ${result.errors.join(', ')}`);
       } else {
-        new Notice(`✅ ${result.files.join(', ')}`);
+        new Notice(`✅ ${i18n.t('notify.pushComplete')}`);
       }
     } catch (error) {
-      new Notice(`❌ Push failed: ${error}`);
+      new Notice(`❌ ${i18n.t('notify.pushFailed')}: ${error}`);
     }
   }
 
   async pullFromGitHub(): Promise<void> {
     if (!this.settings.github.token || !this.settings.github.owner) {
-      new Notice('⚠️ GitHub not configured.');
+      new Notice(i18n.t('notify.notConfiguredGithub'));
       return;
     }
 
     try {
       const result = await this.syncManager.pullFromGitHub();
       if (result.errors.length > 0) {
-        new Notice(`⚠️ Pull errors: ${result.errors.join(', ')}`);
+        new Notice(`⚠️ ${i18n.t('notify.pullFailed')}: ${result.errors.join(', ')}`);
       } else {
-        new Notice(`✅ Pulled from GitHub`);
+        new Notice(`✅ ${i18n.t('notify.pullComplete')}`);
       }
     } catch (error) {
-      new Notice(`❌ Pull failed: ${error}`);
+      new Notice(`❌ ${i18n.t('notify.pullFailed')}: ${error}`);
     }
   }
 
   async syncCurrentFile(): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new Notice('No active file');
+      new Notice(i18n.t('notify.noActiveFile'));
       return;
     }
 
     try {
       await this.syncManager.syncSingleFile(activeFile);
-      new Notice(`✅ Synced: ${activeFile.basename}`);
+      new Notice(`✅ ${i18n.t('notify.fileSynced')}: ${activeFile.basename}`);
     } catch (error) {
-      new Notice(`❌ Sync failed: ${error}`);
+      new Notice(`❌ ${i18n.t('notify.syncFailed')}: ${error}`);
     }
   }
 
@@ -489,11 +489,11 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
 
     if (this.paused) {
       this.stopScheduler();
-      this.syncManager['setStatus']('paused', 'Auto sync paused');
-      new Notice('⏸️ Auto sync paused');
+      this.syncManager['setStatus']('paused', i18n.t('status.paused'));
+      new Notice(i18n.t('notify.syncPaused'));
     } else {
       this.startScheduler();
-      new Notice('▶️ Auto sync resumed');
+      new Notice(i18n.t('notify.syncResumed'));
     }
   }
 
@@ -593,28 +593,29 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
 
     // ---- Header ----
     containerEl.createEl('h2', { text: 'Feishu GitHub Sync' });
+    containerEl.createEl('h2', { text: 'Feishu GitHub Sync' });
     containerEl.createEl('p', {
-      text: 'Bidirectional sync between Obsidian, Feishu Docs, and GitHub.',
+      text: i18n.t('plugin.description'),
       attr: { style: 'color: var(--text-muted); margin-bottom: 24px;' },
     });
 
     // ========================
     // 1. Authentication
     // ========================
-    this.renderSection(containerEl, 'Authentication', (section) => {
-      this.renderTextInput(section, 'Feishu App ID', settings.feishu.appId, 'cli_xxx', (v) => {
+    this.renderSection(containerEl, i18n.t('settings.auth.title'), (section) => {
+      this.renderTextInput(section, i18n.t('settings.auth.feishuAppId'), settings.feishu.appId, 'cli_xxx', (v) => {
         settings.feishu.appId = v;
       });
-      this.renderPasswordInput(section, 'Feishu App Secret', settings.feishu.appSecret, 'App Secret', (v) => {
+      this.renderPasswordInput(section, i18n.t('settings.auth.feishuAppSecret'), settings.feishu.appSecret, 'App Secret', (v) => {
         settings.feishu.appSecret = v;
       });
 
       section.createEl('hr', { attr: { style: 'margin: 12px 0;' } });
 
-      this.renderPasswordInput(section, 'GitHub Personal Access Token', settings.github.token, 'ghp_xxx', (v) => {
+      this.renderPasswordInput(section, i18n.t('settings.auth.githubToken'), settings.github.token, 'ghp_xxx', (v) => {
         settings.github.token = v;
       });
-      this.renderTextInput(section, 'GitHub Repository', `${settings.github.owner}/${settings.github.repo}`, 'owner/repo', (v) => {
+      this.renderTextInput(section, i18n.t('settings.auth.githubRepo'), `${settings.github.owner}/${settings.github.repo}`, 'owner/repo', (v) => {
         const parts = v.split('/');
         settings.github.owner = parts[0] || '';
         settings.github.repo = parts[1] || '';
@@ -627,37 +628,35 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
             'background: var(--background-modifier-warning); color: var(--text-warning); padding: 10px; border-radius: 6px; font-size: 12px; margin-top: 8px;',
         },
       });
-      warnDiv.innerHTML =
-        '⚠️ <strong>Security reminder:</strong> Make sure your repository has a <code>.gitignore</code> that excludes <code>.obsidian/plugins/</code> and credential files. Otherwise your tokens may be exposed on GitHub.';
+      warnDiv.innerHTML = i18n.t('settings.auth.securityWarning');
     });
 
     // ========================
     // 2. Automation & Schedule
     // ========================
-    this.renderSection(containerEl, 'Automation & Schedule', (section) => {
-      // Global toggle
-      this.renderToggle(section, 'Enable auto sync', settings.enabled, (v) => {
+    this.renderSection(containerEl, i18n.t('settings.automation.title'), (section) => {
+      this.renderToggle(section, i18n.t('settings.automation.enableSync'), settings.enabled, (v) => {
         settings.enabled = v;
       });
-      this.renderToggle(section, 'File change watcher', settings.fileWatcherEnabled, (v) => {
+      this.renderToggle(section, i18n.t('settings.automation.fileWatcher'), settings.fileWatcherEnabled, (v) => {
         settings.fileWatcherEnabled = v;
       });
-      this.renderToggle(section, 'Sync on startup', settings.syncOnStartup, (v) => {
+      this.renderToggle(section, i18n.t('settings.automation.syncOnStartup'), settings.syncOnStartup, (v) => {
         settings.syncOnStartup = v;
       });
 
       // Sync mode dropdown
       const modeLabel = section.createEl('label');
-      modeLabel.createSpan({ text: 'Sync mode' });
+      modeLabel.createSpan({ text: i18n.t('settings.automation.syncMode') });
       const modeSelect = modeLabel.createEl('select');
       modeSelect.style.display = 'block';
       modeSelect.style.marginTop = '4px';
       modeSelect.style.marginBottom = '8px';
 
       const modes: { value: SyncMode; label: string }[] = [
-        { value: 'off', label: 'Off (manual only)' },
-        { value: 'interval', label: 'Fixed interval' },
-        { value: 'cron', label: 'Scheduled (cron)' },
+        { value: 'off', label: i18n.t('settings.automation.off') },
+        { value: 'interval', label: i18n.t('settings.automation.interval') },
+        { value: 'cron', label: i18n.t('settings.automation.cron') },
       ];
 
       for (const m of modes) {
@@ -669,7 +668,7 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
       // Interval input (shown only when interval mode)
       const intervalContainer = section.createEl('div');
       intervalContainer.style.display = settings.syncMode === 'interval' ? 'block' : 'none';
-      this.renderNumberInput(intervalContainer, 'Interval (minutes)', settings.intervalMinutes, 1, 1440, (v) => {
+      this.renderNumberInput(intervalContainer, i18n.t('settings.automation.intervalMinutes'), settings.intervalMinutes, 1, 1440, (v) => {
         settings.intervalMinutes = v;
       });
 
@@ -677,15 +676,14 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
       const cronContainer = section.createEl('div');
       cronContainer.style.display = settings.syncMode === 'cron' ? 'block' : 'none';
 
-      this.renderTextInput(cronContainer, 'Cron expression', settings.cronExpression, '0 9 * * 1', (v) => {
+      this.renderTextInput(cronContainer, i18n.t('settings.automation.cronExpression'), settings.cronExpression, '0 9 * * 1', (v) => {
         settings.cronExpression = v;
       });
       cronContainer.createEl('p', {
-        text: 'Format: minute hour day-of-month month day-of-week. Example: "0 9 * * 1" = Monday 9:00 AM.',
+        text: i18n.t('settings.automation.cronHelp'),
         attr: { style: 'font-size: 11px; color: var(--text-faint); margin-top: 2px;' },
       });
 
-      // Toggle visibility based on mode
       modeSelect.addEventListener('change', () => {
         settings.syncMode = modeSelect.value as SyncMode;
         intervalContainer.style.display = settings.syncMode === 'interval' ? 'block' : 'none';
@@ -696,35 +694,35 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
     // ========================
     // 3. Scope & Strategy
     // ========================
-    this.renderSection(containerEl, 'Scope & Strategy', (section) => {
-      this.renderTextInput(section, 'Sync folder (optional)', settings.syncFolder, 'FeishuSync/', (v) => {
+    this.renderSection(containerEl, i18n.t('settings.scope.title'), (section) => {
+      this.renderTextInput(section, i18n.t('settings.scope.syncFolder'), settings.syncFolder, 'FeishuSync/', (v) => {
         settings.syncFolder = v;
       });
       section.createEl('p', {
-        text: 'Leave empty to sync the entire vault.',
+        text: i18n.t('settings.scope.syncFolderHelp'),
         attr: { style: 'font-size: 11px; color: var(--text-faint); margin-top: -6px; margin-bottom: 10px;' },
       });
 
-      this.renderTextInput(section, 'Attachment folder', settings.attachmentFolder, 'attachments/feishu', (v) => {
+      this.renderTextInput(section, i18n.t('settings.scope.attachmentFolder'), settings.attachmentFolder, 'attachments/feishu', (v) => {
         settings.attachmentFolder = v;
       });
       section.createEl('p', {
-        text: 'Local folder for images downloaded from Feishu.',
+        text: i18n.t('settings.scope.attachmentFolderHelp'),
         attr: { style: 'font-size: 11px; color: var(--text-faint); margin-top: -6px; margin-bottom: 10px;' },
       });
 
       // Conflict strategy dropdown
       const conflictLabel = section.createEl('label');
-      conflictLabel.createSpan({ text: 'Default conflict strategy' });
+      conflictLabel.createSpan({ text: i18n.t('settings.scope.conflictStrategy') });
       const conflictSelect = conflictLabel.createEl('select');
       conflictSelect.style.display = 'block';
       conflictSelect.style.marginTop = '4px';
       conflictSelect.style.marginBottom = '8px';
 
       const strategies: { value: ConflictStrategy; label: string }[] = [
-        { value: 'keep_both', label: 'Keep both (create copy)' },
-        { value: 'local_wins', label: 'Local overwrites remote' },
-        { value: 'remote_wins', label: 'Remote overwrites local' },
+        { value: 'keep_both', label: i18n.t('settings.scope.keepBoth') },
+        { value: 'local_wins', label: i18n.t('settings.scope.localWins') },
+        { value: 'remote_wins', label: i18n.t('settings.scope.remoteWins') },
       ];
 
       for (const s of strategies) {
@@ -738,7 +736,7 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
       });
 
       // Status bar toggle
-      this.renderToggle(section, 'Show status bar indicator', settings.showStatusBar, (v) => {
+      this.renderToggle(section, i18n.t('settings.scope.statusBar'), settings.showStatusBar, (v) => {
         settings.showStatusBar = v;
       });
     });
@@ -751,15 +749,15 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
     btnContainer.style.gap = '8px';
     btnContainer.style.marginTop = '20px';
 
-    const saveBtn = btnContainer.createEl('button', { text: 'Save Settings' });
+    const saveBtn = btnContainer.createEl('button', { text: i18n.t('settings.buttons.save') });
     saveBtn.style.cssText = 'padding: 8px 20px; background: var(--interactive-accent); color: var(--text-on-accent); border: none; border-radius: 6px; cursor: pointer; font-size: 14px;';
 
-    const syncBtn = btnContainer.createEl('button', { text: 'Sync Now' });
+    const syncBtn = btnContainer.createEl('button', { text: i18n.t('settings.buttons.syncNow') });
     syncBtn.style.cssText = 'padding: 8px 20px; background: var(--interactive-success); color: var(--text-on-accent); border: none; border-radius: 6px; cursor: pointer; font-size: 14px;';
 
     saveBtn.addEventListener('click', () => {
       this.plugin.updateSettings(settings);
-      new Notice('Settings saved');
+      new Notice(i18n.t('notify.settingsSaved'));
     });
 
     syncBtn.addEventListener('click', () => {
