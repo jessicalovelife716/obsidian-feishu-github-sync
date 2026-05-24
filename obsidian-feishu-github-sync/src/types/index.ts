@@ -14,7 +14,7 @@ export interface GitHubConfig {
 
 // ==================== Sync Settings ====================
 
-export type SyncMode = 'off' | 'interval' | 'cron';
+export type SyncMode = 'off' | 'interval' | 'scheduled';
 export type ConflictStrategy = 'keep_both' | 'local_wins' | 'remote_wins';
 export type SyncDirection = 'bidirectional' | 'obsidian-to-remote' | 'remote-to-obsidian';
 
@@ -24,11 +24,12 @@ export interface SyncSettings {
   github: GitHubConfig;
 
   // Automation & Schedule
-  enabled: boolean;               // global sync toggle
+  enabled: boolean;               // global sync toggle — master switch
   fileWatcherEnabled: boolean;    // file change listener toggle
-  syncMode: SyncMode;             // off / interval / cron
-  intervalMinutes: number;        // used when syncMode === 'interval'
-  cronExpression: string;         // used when syncMode === 'cron'
+  syncMode: SyncMode;             // off / interval / scheduled
+  intervalMinutes: number;        // used when syncMode === 'interval', min 15
+  scheduledDays: number[];        // used when syncMode === 'scheduled', 0=Sun…6=Sat
+  scheduledTimes: string[];       // used when syncMode === 'scheduled', HH:mm[], max 3
   syncOnStartup: boolean;         // silent sync on Obsidian open
 
   // Scope & Strategy
@@ -38,7 +39,7 @@ export interface SyncSettings {
   syncDirection: SyncDirection;
   showStatusBar: boolean;
 
-  // Legacy weekly fields (mapped to cron internally)
+  // Legacy weekly fields
   weeklySyncDay: number;
   weeklySyncHour: number;
   weeklySyncMinute: number;

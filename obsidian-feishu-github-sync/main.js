@@ -9488,7 +9488,7 @@ var SyncManager = class {
     this.feishuDocCache = /* @__PURE__ */ new Map();
     // File watcher debounce
     this.debounceTimers = /* @__PURE__ */ new Map();
-    this.DEBOUNCE_MS = 3e3;
+    this.DEBOUNCE_MS = 5e3;
     this.watcherSuspended = false;
     // Callbacks for main.ts
     this.onStatusChange = null;
@@ -9558,7 +9558,7 @@ var SyncManager = class {
       clearTimeout(existing);
     const timer = setTimeout(() => {
       this.debounceTimers.delete(file.path);
-      this.syncSingleFile(file).catch(console.error);
+      this.syncFileToFeishu(file).catch(console.error);
     }, this.DEBOUNCE_MS);
     this.debounceTimers.set(file.path, timer);
   }
@@ -9814,6 +9814,35 @@ ${content}`;
       }
     } catch (error) {
       console.error(`Failed to sync ${file.path}:`, error);
+    }
+  }
+  /** File-watcher triggered: only push to Feishu, skip git entirely. */
+  async syncFileToFeishu(file) {
+    if (this._syncLock)
+      return;
+    if (!this.settings.fileWatcherEnabled)
+      return;
+    if (!this.shouldSyncFile(file.path))
+      return;
+    try {
+      const content = await this.app.vault.read(file);
+      const title = this.extractTitle(content, file.basename);
+      const plainContent = this.stripFrontmatter(content);
+      const mapping = this.mappings.get(file.path);
+      if (mapping?.feishuDocId) {
+        await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
+      } else {
+        const existingDoc = await this.feishu.findDocumentByTitle(title);
+        if (existingDoc) {
+          await this.feishu.updateDocument(existingDoc.docId, plainContent, title);
+          this.updateMapping(file.path, existingDoc.docId);
+        } else {
+          const newDocId = await this.feishu.createDocument(title, plainContent);
+          this.updateMapping(file.path, newDocId);
+        }
+      }
+    } catch (error) {
+      console.error(`[FileWatcher] Failed to sync ${file.path}:`, error);
     }
   }
   // ==================== Image Handling ====================
@@ -21686,16 +21715,29 @@ var en_default = {
     },
     automation: {
       title: "Automation & Schedule",
-      enableSync: "Enable auto sync",
+      masterToggle: "Enable auto sync",
+      masterToggleDesc: "When enabled, the plugin will automatically sync data in the background based on your strategy. When disabled, all automatic and scheduled tasks are paused \u2014 you can only sync manually via the command palette.",
       fileWatcher: "File change watcher",
+      fileWatcherDesc: "Listen for local file changes. When you stop typing for a moment, the file is automatically pushed to Feishu.",
       syncOnStartup: "Sync on startup",
-      syncMode: "Sync mode",
-      off: "Off (manual only)",
+      syncOnStartupDesc: "Automatically run a full silent sync in the background when Obsidian starts.",
+      scheduleMode: "Schedule mode",
+      off: "Disabled",
       interval: "Fixed interval",
-      cron: "Scheduled (cron)",
+      scheduled: "Scheduled time",
       intervalMinutes: "Interval (minutes)",
-      cronExpression: "Cron expression",
-      cronHelp: 'Format: minute hour day-of-month month day-of-week. Example: "0 9 * * 1" = Monday 9:00 AM.'
+      intervalWarning: "To avoid API rate limits, the interval cannot be less than 15 minutes.",
+      scheduleDays: "Days of week",
+      scheduleTime: "Time",
+      scheduleAdd: "Add time",
+      scheduleMax: "Maximum 3 time slots",
+      mon: "Mon",
+      tue: "Tue",
+      wed: "Wed",
+      thu: "Thu",
+      fri: "Fri",
+      sat: "Sat",
+      sun: "Sun"
     },
     scope: {
       title: "Scope & Strategy",
@@ -21765,17 +21807,30 @@ var zh_CN_default = {
       securityWarning: "\u26A0\uFE0F <strong>\u5B89\u5168\u63D0\u9192\uFF1A</strong>\u8BF7\u786E\u4FDD\u4ED3\u5E93\u6839\u76EE\u5F55\u6709 <code>.gitignore</code> \u6587\u4EF6\uFF0C\u6392\u9664 <code>.obsidian/plugins/</code> \u548C\u51ED\u8BC1\u6587\u4EF6\uFF0C\u5426\u5219 Token \u53EF\u80FD\u88AB\u516C\u5F00\u5230 GitHub\u3002"
     },
     automation: {
-      title: "\u81EA\u52A8\u5316\u4E0E\u5B9A\u65F6\u540C\u6B65",
-      enableSync: "\u542F\u7528\u81EA\u52A8\u540C\u6B65",
+      title: "\u81EA\u52A8\u5316\u4E0E\u9891\u7387\u63A7\u5236",
+      masterToggle: "\u5168\u5C40\u81EA\u52A8\u540C\u6B65\u603B\u63A7",
+      masterToggleDesc: "\u5F00\u542F\u540E\uFF0C\u63D2\u4EF6\u5C06\u5728\u540E\u53F0\u6839\u636E\u60A8\u7684\u7B56\u7565\u81EA\u52A8\u540C\u6B65\u6570\u636E\u3002\u5173\u95ED\u540E\uFF0C\u6240\u6709\u81EA\u52A8\u4E0E\u5B9A\u65F6\u4EFB\u52A1\u5C06\u6682\u505C\uFF0C\u60A8\u53EA\u80FD\u901A\u8FC7\u547D\u4EE4\u9762\u677F\u624B\u52A8\u540C\u6B65\u3002",
       fileWatcher: "\u6587\u4EF6\u53D8\u66F4\u76D1\u542C",
+      fileWatcherDesc: "\u76D1\u542C\u672C\u5730\u6587\u4EF6\u4FEE\u6539\u3002\u5F53\u60A8\u505C\u6B62\u8F93\u5165\u4E00\u6BB5\u65F6\u95F4\u540E\uFF0C\u81EA\u52A8\u5C06\u8BE5\u6587\u4EF6\u5355\u5411\u63A8\u9001\u5230\u98DE\u4E66\u3002",
       syncOnStartup: "\u542F\u52A8\u65F6\u540C\u6B65",
-      syncMode: "\u540C\u6B65\u6A21\u5F0F",
-      off: "\u5173\u95ED\uFF08\u4EC5\u624B\u52A8\uFF09",
+      syncOnStartupDesc: "\u542F\u52A8 Obsidian \u65F6\u81EA\u52A8\u5728\u540E\u53F0\u6267\u884C\u4E00\u6B21\u5B8C\u6574\u7684\u53CC\u5411\u540C\u6B65\u3002",
+      scheduleMode: "\u5B9A\u65F6\u540C\u6B65\u6A21\u5F0F",
+      off: "\u5173\u95ED\u5B9A\u65F6",
       interval: "\u56FA\u5B9A\u95F4\u9694",
-      cron: "\u5B9A\u65F6\u4EFB\u52A1 (Cron)",
+      scheduled: "\u5B9A\u65F6\u4EFB\u52A1",
       intervalMinutes: "\u95F4\u9694\uFF08\u5206\u949F\uFF09",
-      cronExpression: "Cron \u8868\u8FBE\u5F0F",
-      cronHelp: '\u683C\u5F0F\uFF1A\u5206 \u65F6 \u65E5 \u6708 \u5468\u3002\u793A\u4F8B\uFF1A"0 9 * * 1" = \u6BCF\u5468\u4E00 09:00\u3002'
+      intervalWarning: "\u4E3A\u9632\u6B62\u89E6\u53D1 API \u9891\u7387\u9650\u5236\uFF0C\u95F4\u9694\u4E0D\u80FD\u77ED\u4E8E 15 \u5206\u949F\u3002",
+      scheduleDays: "\u91CD\u590D\u65E5\u671F",
+      scheduleTime: "\u65F6\u95F4",
+      scheduleAdd: "\u6DFB\u52A0\u65F6\u95F4",
+      scheduleMax: "\u6700\u591A\u53EF\u6DFB\u52A0 3 \u4E2A\u65F6\u95F4\u70B9",
+      mon: "\u4E00",
+      tue: "\u4E8C",
+      wed: "\u4E09",
+      thu: "\u56DB",
+      fri: "\u4E94",
+      sat: "\u516D",
+      sun: "\u65E5"
     },
     scope: {
       title: "\u540C\u6B65\u8303\u56F4\u4E0E\u7B56\u7565",
@@ -21845,17 +21900,30 @@ var zh_TW_default = {
       securityWarning: "\u26A0\uFE0F <strong>\u5B89\u5168\u63D0\u9192\uFF1A</strong>\u8ACB\u78BA\u4FDD\u5009\u5EAB\u6839\u76EE\u9304\u6709 <code>.gitignore</code> \u6A94\u6848\uFF0C\u6392\u9664 <code>.obsidian/plugins/</code> \u548C\u6191\u8B49\u6A94\u6848\uFF0C\u5426\u5247 Token \u53EF\u80FD\u88AB\u516C\u958B\u5230 GitHub\u3002"
     },
     automation: {
-      title: "\u81EA\u52D5\u5316\u8207\u6392\u7A0B\u540C\u6B65",
-      enableSync: "\u555F\u7528\u81EA\u52D5\u540C\u6B65",
+      title: "\u81EA\u52D5\u5316\u8207\u983B\u7387\u63A7\u5236",
+      masterToggle: "\u5168\u5C40\u81EA\u52D5\u540C\u6B65\u7E3D\u63A7",
+      masterToggleDesc: "\u958B\u555F\u5F8C\uFF0C\u63D2\u4EF6\u5C07\u5728\u5F8C\u53F0\u6839\u64DA\u60A8\u7684\u7B56\u7565\u81EA\u52D5\u540C\u6B65\u8CC7\u6599\u3002\u95DC\u9589\u5F8C\uFF0C\u6240\u6709\u81EA\u52D5\u8207\u5B9A\u6642\u4EFB\u52D9\u5C07\u66AB\u505C\uFF0C\u60A8\u53EA\u80FD\u900F\u904E\u547D\u4EE4\u9762\u677F\u624B\u52D5\u540C\u6B65\u3002",
       fileWatcher: "\u6A94\u6848\u8B8A\u66F4\u76E3\u807D",
+      fileWatcherDesc: "\u76E3\u807D\u672C\u5730\u6A94\u6848\u4FEE\u6539\u3002\u7576\u60A8\u505C\u6B62\u8F38\u5165\u4E00\u6BB5\u6642\u9593\u5F8C\uFF0C\u81EA\u52D5\u5C07\u8A72\u6A94\u6848\u55AE\u5411\u63A8\u9001\u5230\u98DB\u66F8\u3002",
       syncOnStartup: "\u555F\u52D5\u6642\u540C\u6B65",
-      syncMode: "\u540C\u6B65\u6A21\u5F0F",
-      off: "\u95DC\u9589\uFF08\u50C5\u624B\u52D5\uFF09",
+      syncOnStartupDesc: "\u555F\u52D5 Obsidian \u6642\u81EA\u52D5\u5728\u80CC\u666F\u57F7\u884C\u4E00\u6B21\u5B8C\u6574\u7684\u96D9\u5411\u540C\u6B65\u3002",
+      scheduleMode: "\u5B9A\u6642\u540C\u6B65\u6A21\u5F0F",
+      off: "\u95DC\u9589\u5B9A\u6642",
       interval: "\u56FA\u5B9A\u9593\u9694",
-      cron: "\u6392\u7A0B\u4EFB\u52D9 (Cron)",
+      scheduled: "\u5B9A\u6642\u4EFB\u52D9",
       intervalMinutes: "\u9593\u9694\uFF08\u5206\u9418\uFF09",
-      cronExpression: "Cron \u8868\u9054\u5F0F",
-      cronHelp: '\u683C\u5F0F\uFF1A\u5206 \u6642 \u65E5 \u6708 \u9031\u3002\u7BC4\u4F8B\uFF1A"0 9 * * 1" = \u6BCF\u9031\u4E00 09:00\u3002'
+      intervalWarning: "\u70BA\u9632\u6B62\u89F8\u767C API \u983B\u7387\u9650\u5236\uFF0C\u9593\u9694\u4E0D\u80FD\u77ED\u65BC 15 \u5206\u9418\u3002",
+      scheduleDays: "\u91CD\u8907\u65E5\u671F",
+      scheduleTime: "\u6642\u9593",
+      scheduleAdd: "\u65B0\u589E\u6642\u9593",
+      scheduleMax: "\u6700\u591A\u53EF\u65B0\u589E 3 \u500B\u6642\u9593\u9EDE",
+      mon: "\u4E00",
+      tue: "\u4E8C",
+      wed: "\u4E09",
+      thu: "\u56DB",
+      fri: "\u4E94",
+      sat: "\u516D",
+      sun: "\u65E5"
     },
     scope: {
       title: "\u540C\u6B65\u7BC4\u570D\u8207\u7B56\u7565",
@@ -21925,17 +21993,30 @@ var es_default = {
       securityWarning: "\u26A0\uFE0F <strong>Recordatorio de seguridad:</strong> Aseg\xFArate de que tu repositorio tenga un <code>.gitignore</code> que excluya <code>.obsidian/plugins/</code> y archivos de credenciales. De lo contrario, tus tokens podr\xEDan quedar expuestos en GitHub."
     },
     automation: {
-      title: "Automatizaci\xF3n y Programaci\xF3n",
-      enableSync: "Activar sincronizaci\xF3n autom\xE1tica",
+      title: "Automatizaci\xF3n y Control de Frecuencia",
+      masterToggle: "Activar sincronizaci\xF3n autom\xE1tica",
+      masterToggleDesc: "Cuando est\xE1 activado, el plugin sincroniza datos autom\xE1ticamente en segundo plano seg\xFAn su estrategia. Cuando est\xE1 desactivado, todas las tareas autom\xE1ticas y programadas se pausan; solo puede sincronizar manualmente mediante la paleta de comandos.",
       fileWatcher: "Vigilancia de cambios",
+      fileWatcherDesc: "Escucha los cambios locales. Cuando deja de escribir por un momento, el archivo se env\xEDa autom\xE1ticamente a Feishu.",
       syncOnStartup: "Sincronizar al inicio",
-      syncMode: "Modo de sincronizaci\xF3n",
-      off: "Apagado (solo manual)",
+      syncOnStartupDesc: "Ejecuta autom\xE1ticamente una sincronizaci\xF3n completa en segundo plano al iniciar Obsidian.",
+      scheduleMode: "Modo de programaci\xF3n",
+      off: "Desactivado",
       interval: "Intervalo fijo",
-      cron: "Programado (cron)",
+      scheduled: "Programado",
       intervalMinutes: "Intervalo (minutos)",
-      cronExpression: "Expresi\xF3n cron",
-      cronHelp: 'Formato: minuto hora d\xEDa-mes mes d\xEDa-semana. Ej: "0 9 * * 1" = Lunes 9:00 AM.'
+      intervalWarning: "Para evitar l\xEDmites de API, el intervalo no puede ser inferior a 15 minutos.",
+      scheduleDays: "D\xEDas de la semana",
+      scheduleTime: "Hora",
+      scheduleAdd: "A\xF1adir hora",
+      scheduleMax: "M\xE1ximo 3 horas",
+      mon: "Lun",
+      tue: "Mar",
+      wed: "Mi\xE9",
+      thu: "Jue",
+      fri: "Vie",
+      sat: "S\xE1b",
+      sun: "Dom"
     },
     scope: {
       title: "Alcance y Estrategia",
@@ -22005,17 +22086,30 @@ var fr_default = {
       securityWarning: "\u26A0\uFE0F <strong>Rappel de s\xE9curit\xE9 :</strong> Assurez-vous que votre d\xE9p\xF4t contient un <code>.gitignore</code> excluant <code>.obsidian/plugins/</code> et les fichiers d'identifiants. Sinon, vos tokens pourraient \xEAtre expos\xE9s sur GitHub."
     },
     automation: {
-      title: "Automatisation et Planification",
-      enableSync: "Activer la synchronisation automatique",
+      title: "Automatisation et Contr\xF4le de la Fr\xE9quence",
+      masterToggle: "Activer la synchronisation automatique",
+      masterToggleDesc: "Lorsqu'il est activ\xE9, le plugin synchronise automatiquement les donn\xE9es en arri\xE8re-plan selon votre strat\xE9gie. Lorsqu'il est d\xE9sactiv\xE9, toutes les t\xE2ches automatiques et planifi\xE9es sont mises en pause \u2014 vous ne pouvez synchroniser que manuellement via la palette de commandes.",
       fileWatcher: "Surveillance des fichiers",
+      fileWatcherDesc: "Surveille les modifications locales. Lorsque vous arr\xEAtez de taper un instant, le fichier est automatiquement pouss\xE9 vers Feishu.",
       syncOnStartup: "Synchroniser au d\xE9marrage",
-      syncMode: "Mode de synchronisation",
-      off: "D\xE9sactiv\xE9 (manuel uniquement)",
+      syncOnStartupDesc: "Ex\xE9cute automatiquement une synchronisation compl\xE8te en arri\xE8re-plan au d\xE9marrage d'Obsidian.",
+      scheduleMode: "Mode de planification",
+      off: "D\xE9sactiv\xE9",
       interval: "Intervalle fixe",
-      cron: "Planifi\xE9 (cron)",
+      scheduled: "Planifi\xE9",
       intervalMinutes: "Intervalle (minutes)",
-      cronExpression: "Expression cron",
-      cronHelp: 'Format : minute heure jour-mois mois jour-semaine. Ex : "0 9 * * 1" = Lundi 9h00.'
+      intervalWarning: "Pour \xE9viter les limites de d\xE9bit API, l'intervalle ne peut pas \xEAtre inf\xE9rieur \xE0 15 minutes.",
+      scheduleDays: "Jours de la semaine",
+      scheduleTime: "Heure",
+      scheduleAdd: "Ajouter une heure",
+      scheduleMax: "Maximum 3 cr\xE9neaux",
+      mon: "Lun",
+      tue: "Mar",
+      wed: "Mer",
+      thu: "Jeu",
+      fri: "Ven",
+      sat: "Sam",
+      sun: "Dim"
     },
     scope: {
       title: "Port\xE9e et Strat\xE9gie",
@@ -22085,17 +22179,30 @@ var ru_default = {
       securityWarning: "\u26A0\uFE0F <strong>\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u043E \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438:</strong> \u0423\u0431\u0435\u0434\u0438\u0442\u0435\u0441\u044C, \u0447\u0442\u043E \u0432 \u0432\u0430\u0448\u0435\u043C \u0440\u0435\u043F\u043E\u0437\u0438\u0442\u043E\u0440\u0438\u0438 \u0435\u0441\u0442\u044C <code>.gitignore</code>, \u0438\u0441\u043A\u043B\u044E\u0447\u0430\u044E\u0449\u0438\u0439 <code>.obsidian/plugins/</code> \u0438 \u0444\u0430\u0439\u043B\u044B \u0441 \u0443\u0447\u0435\u0442\u043D\u044B\u043C\u0438 \u0434\u0430\u043D\u043D\u044B\u043C\u0438. \u0418\u043D\u0430\u0447\u0435 \u0442\u043E\u043A\u0435\u043D\u044B \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u0440\u0430\u0441\u043A\u0440\u044B\u0442\u044B \u043D\u0430 GitHub."
     },
     automation: {
-      title: "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u044F \u0438 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435",
-      enableSync: "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E",
+      title: "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u044F \u0438 \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0447\u0430\u0441\u0442\u043E\u0442\u044B",
+      masterToggle: "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E",
+      masterToggleDesc: "\u041F\u0440\u0438 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438 \u043F\u043B\u0430\u0433\u0438\u043D \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0435 \u0432 \u0444\u043E\u043D\u0435 \u0441\u043E\u0433\u043B\u0430\u0441\u043D\u043E \u0432\u0430\u0448\u0435\u0439 \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438. \u041F\u0440\u0438 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438 \u0432\u0441\u0435 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u0438 \u0437\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u0437\u0430\u0434\u0430\u0447\u0438 \u043F\u0440\u0438\u043E\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u044E\u0442\u0441\u044F \u2014 \u0432\u044B \u043C\u043E\u0436\u0435\u0442\u0435 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u0447\u0435\u0440\u0435\u0437 \u043F\u0430\u043B\u0438\u0442\u0440\u0443 \u043A\u043E\u043C\u0430\u043D\u0434.",
       fileWatcher: "\u041E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439",
+      fileWatcherDesc: "\u041E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u0435\u0442 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u041A\u043E\u0433\u0434\u0430 \u0432\u044B \u043F\u0440\u0435\u043A\u0440\u0430\u0449\u0430\u0435\u0442\u0435 \u043F\u0435\u0447\u0430\u0442\u0430\u0442\u044C \u043D\u0430 \u043D\u0435\u043A\u043E\u0442\u043E\u0440\u043E\u0435 \u0432\u0440\u0435\u043C\u044F, \u0444\u0430\u0439\u043B \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0432 Feishu.",
       syncOnStartup: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u043F\u0440\u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0435",
-      syncMode: "\u0420\u0435\u0436\u0438\u043C \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438",
-      off: "\u0412\u044B\u043A\u043B (\u0442\u043E\u043B\u044C\u043A\u043E \u0432\u0440\u0443\u0447\u043D\u0443\u044E)",
+      syncOnStartupDesc: "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442 \u043F\u043E\u043B\u043D\u0443\u044E \u0444\u043E\u043D\u043E\u0432\u0443\u044E \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E \u043F\u0440\u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0435 Obsidian.",
+      scheduleMode: "\u0420\u0435\u0436\u0438\u043C \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u044F",
+      off: "\u0412\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
       interval: "\u0424\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0439 \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B",
-      cron: "\u041F\u043E \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u044E (cron)",
+      scheduled: "\u041F\u043E \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u044E",
       intervalMinutes: "\u0418\u043D\u0442\u0435\u0440\u0432\u0430\u043B (\u043C\u0438\u043D\u0443\u0442\u044B)",
-      cronExpression: "Cron-\u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u0435",
-      cronHelp: '\u0424\u043E\u0440\u043C\u0430\u0442: \u043C\u0438\u043D\u0443\u0442\u0430 \u0447\u0430\u0441 \u0434\u0435\u043D\u044C-\u043C\u0435\u0441\u044F\u0446 \u043C\u0435\u0441\u044F\u0446 \u0434\u0435\u043D\u044C-\u043D\u0435\u0434\u0435\u043B\u0438. \u041F\u0440\u0438\u043C\u0435\u0440: "0 9 * * 1" = \u041F\u043D 9:00.'
+      intervalWarning: "\u0427\u0442\u043E\u0431\u044B \u0438\u0437\u0431\u0435\u0436\u0430\u0442\u044C \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u0439 API, \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u0431\u044B\u0442\u044C \u043C\u0435\u043D\u0435\u0435 15 \u043C\u0438\u043D\u0443\u0442.",
+      scheduleDays: "\u0414\u043D\u0438 \u043D\u0435\u0434\u0435\u043B\u0438",
+      scheduleTime: "\u0412\u0440\u0435\u043C\u044F",
+      scheduleAdd: "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u044F",
+      scheduleMax: "\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C 3 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0445 \u0441\u043B\u043E\u0442\u0430",
+      mon: "\u041F\u043D",
+      tue: "\u0412\u0442",
+      wed: "\u0421\u0440",
+      thu: "\u0427\u0442",
+      fri: "\u041F\u0442",
+      sat: "\u0421\u0431",
+      sun: "\u0412\u0441"
     },
     scope: {
       title: "\u041E\u0431\u043B\u0430\u0441\u0442\u044C \u0438 \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044F",
@@ -22165,17 +22272,30 @@ var hi_default = {
       securityWarning: "\u26A0\uFE0F <strong>\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0905\u0928\u0941\u0938\u094D\u092E\u093E\u0930\u0915:</strong> \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A\u0915\u0947 \u0930\u093F\u092A\u0949\u091C\u093F\u091F\u0930\u0940 \u092E\u0947\u0902 <code>.gitignore</code> \u0939\u0948 \u091C\u094B <code>.obsidian/plugins/</code> \u0914\u0930 \u0915\u094D\u0930\u0947\u0921\u0947\u0902\u0936\u093F\u092F\u0932 \u092B\u093C\u093E\u0907\u0932\u094B\u0902 \u0915\u094B \u092C\u093E\u0939\u0930 \u0915\u0930\u0924\u093E \u0939\u0948\u0964 \u0905\u0928\u094D\u092F\u0925\u093E \u0906\u092A\u0915\u0947 \u091F\u094B\u0915\u0928 GitHub \u092A\u0930 \u0938\u093E\u0930\u094D\u0935\u091C\u0928\u093F\u0915 \u0939\u094B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
     },
     automation: {
-      title: "\u0938\u094D\u0935\u091A\u093E\u0932\u0928 \u0914\u0930 \u0905\u0928\u0941\u0938\u0942\u091A\u0940",
-      enableSync: "\u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0938\u093F\u0902\u0915 \u0938\u0915\u094D\u0937\u092E \u0915\u0930\u0947\u0902",
+      title: "\u0938\u094D\u0935\u091A\u093E\u0932\u0928 \u0914\u0930 \u0906\u0935\u0943\u0924\u094D\u0924\u093F \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u0923",
+      masterToggle: "\u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0938\u093F\u0902\u0915 \u0938\u0915\u094D\u0937\u092E \u0915\u0930\u0947\u0902",
+      masterToggleDesc: "\u0938\u0915\u094D\u0937\u092E \u0939\u094B\u0928\u0947 \u092A\u0930, \u092A\u094D\u0932\u0917\u0907\u0928 \u0906\u092A\u0915\u0940 \u0930\u0923\u0928\u0940\u0924\u093F \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u092E\u0947\u0902 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 \u0921\u0947\u091F\u093E \u0938\u093F\u0902\u0915 \u0915\u0930\u0947\u0917\u093E\u0964 \u0905\u0915\u094D\u0937\u092E \u0939\u094B\u0928\u0947 \u092A\u0930, \u0938\u092D\u0940 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0914\u0930 \u0905\u0928\u0941\u0938\u0942\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u092F \u0930\u0941\u0915 \u091C\u093E\u090F\u0902\u0917\u0947 \u2014 \u0906\u092A \u0915\u0947\u0935\u0932 \u0915\u092E\u093E\u0902\u0921 \u092A\u0948\u0932\u0947\u091F \u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u092E\u0948\u0928\u094D\u092F\u0941\u0905\u0932 \u0930\u0942\u092A \u0938\u0947 \u0938\u093F\u0902\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
       fileWatcher: "\u092B\u093C\u093E\u0907\u0932 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u0928\u093F\u0917\u0930\u093E\u0928\u0940",
+      fileWatcherDesc: "\u0938\u094D\u0925\u093E\u0928\u0940\u092F \u092B\u093C\u093E\u0907\u0932 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928\u094B\u0902 \u0915\u0940 \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u0915\u0930\u0947\u0902\u0964 \u091C\u092C \u0906\u092A \u0915\u0941\u091B \u0938\u092E\u092F \u0915\u0947 \u0932\u093F\u090F \u091F\u093E\u0907\u092A \u0915\u0930\u0928\u093E \u092C\u0902\u0926 \u0915\u0930\u0924\u0947 \u0939\u0948\u0902, \u0924\u094B \u092B\u093C\u093E\u0907\u0932 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 Feishu \u092A\u0930 \u092D\u0947\u091C \u0926\u0940 \u091C\u093E\u0924\u0940 \u0939\u0948\u0964",
       syncOnStartup: "\u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0905\u092A \u092A\u0930 \u0938\u093F\u0902\u0915 \u0915\u0930\u0947\u0902",
-      syncMode: "\u0938\u093F\u0902\u0915 \u092E\u094B\u0921",
-      off: "\u092C\u0902\u0926 (\u0915\u0947\u0935\u0932 \u092E\u0948\u0928\u094D\u092F\u0941\u0905\u0932)",
+      syncOnStartupDesc: "Obsidian \u092A\u094D\u0930\u093E\u0930\u0902\u092D \u0939\u094B\u0928\u0947 \u092A\u0930 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 \u092A\u0942\u0930\u094D\u0923 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0938\u093F\u0902\u0915 \u091A\u0932\u093E\u090F\u0902\u0964",
+      scheduleMode: "\u0905\u0928\u0941\u0938\u0942\u091A\u0940 \u092E\u094B\u0921",
+      off: "\u092C\u0902\u0926 \u0915\u0930\u0947\u0902",
       interval: "\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0905\u0902\u0924\u0930\u093E\u0932",
-      cron: "\u0905\u0928\u0941\u0938\u0942\u091A\u093F\u0924 (cron)",
+      scheduled: "\u0905\u0928\u0941\u0938\u0942\u091A\u093F\u0924",
       intervalMinutes: "\u0905\u0902\u0924\u0930\u093E\u0932 (\u092E\u093F\u0928\u091F)",
-      cronExpression: "Cron \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0936\u0928",
-      cronHelp: '\u092A\u094D\u0930\u093E\u0930\u0942\u092A: \u092E\u093F\u0928\u091F \u0918\u0902\u091F\u093E \u0926\u093F\u0928-\u092E\u0939\u0940\u0928\u093E \u092E\u0939\u0940\u0928\u093E \u0926\u093F\u0928-\u0938\u092A\u094D\u0924\u093E\u0939\u0964 \u0909\u0926\u093E: "0 9 * * 1" = \u0938\u094B\u092E\u0935\u093E\u0930 \u0938\u0941\u092C\u0939 9:00 \u092C\u091C\u0947\u0964'
+      intervalWarning: "API \u0926\u0930 \u0938\u0940\u092E\u093E \u0938\u0947 \u092C\u091A\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F, \u0905\u0902\u0924\u0930\u093E\u0932 15 \u092E\u093F\u0928\u091F \u0938\u0947 \u0915\u092E \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964",
+      scheduleDays: "\u0938\u092A\u094D\u0924\u093E\u0939 \u0915\u0947 \u0926\u093F\u0928",
+      scheduleTime: "\u0938\u092E\u092F",
+      scheduleAdd: "\u0938\u092E\u092F \u091C\u094B\u0921\u093C\u0947\u0902",
+      scheduleMax: "\u0905\u0927\u093F\u0915\u0924\u092E 3 \u0938\u092E\u092F \u0938\u094D\u0932\u0949\u091F",
+      mon: "\u0938\u094B\u092E",
+      tue: "\u092E\u0902\u0917\u0932",
+      wed: "\u092C\u0941\u0927",
+      thu: "\u0917\u0941\u0930\u0941",
+      fri: "\u0936\u0941\u0915\u094D\u0930",
+      sat: "\u0936\u0928\u093F",
+      sun: "\u0930\u0935\u093F"
     },
     scope: {
       title: "\u0926\u093E\u092F\u0930\u093E \u0914\u0930 \u0930\u0923\u0928\u0940\u0924\u093F",
@@ -22245,17 +22365,30 @@ var ar_default = {
       securityWarning: "\u26A0\uFE0F <strong>\u062A\u0630\u0643\u064A\u0631 \u0623\u0645\u0646\u064A:</strong> \u062A\u0623\u0643\u062F \u0645\u0646 \u0648\u062C\u0648\u062F \u0645\u0644\u0641 <code>.gitignore</code> \u0641\u064A \u0645\u0633\u062A\u0648\u062F\u0639\u0643 \u064A\u0633\u062A\u062B\u0646\u064A <code>.obsidian/plugins/</code> \u0648\u0645\u0644\u0641\u0627\u062A \u0627\u0644\u0627\u0639\u062A\u0645\u0627\u062F\u064A\u0627\u062A. \u0648\u0625\u0644\u0627 \u0641\u0642\u062F \u064A\u062A\u0645 \u0643\u0634\u0641 \u0631\u0645\u0648\u0632\u0643 \u0639\u0644\u0649 GitHub."
     },
     automation: {
-      title: "\u0627\u0644\u0623\u062A\u0645\u062A\u0629 \u0648\u0627\u0644\u062C\u062F\u0648\u0644\u0629",
-      enableSync: "\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629",
+      title: "\u0627\u0644\u0623\u062A\u0645\u062A\u0629 \u0648\u0627\u0644\u062A\u062D\u0643\u0645 \u0641\u064A \u0627\u0644\u062A\u0631\u062F\u062F",
+      masterToggle: "\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629",
+      masterToggleDesc: "\u0639\u0646\u062F \u0627\u0644\u062A\u0641\u0639\u064A\u0644\u060C \u0633\u064A\u0642\u0648\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C \u0627\u0644\u0625\u0636\u0627\u0641\u064A \u0628\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u062A\u0644\u0642\u0627\u0626\u064A\u0627\u064B \u0641\u064A \u0627\u0644\u062E\u0644\u0641\u064A\u0629 \u0648\u0641\u0642\u0627\u064B \u0644\u0627\u0633\u062A\u0631\u0627\u062A\u064A\u062C\u064A\u062A\u0643. \u0639\u0646\u062F \u0627\u0644\u062A\u0639\u0637\u064A\u0644\u060C \u0633\u064A\u062A\u0645 \u0625\u064A\u0642\u0627\u0641 \u062C\u0645\u064A\u0639 \u0627\u0644\u0645\u0647\u0627\u0645 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A\u0629 \u0648\u0627\u0644\u0645\u062C\u062F\u0648\u0644\u0629 \u2014 \u064A\u0645\u0643\u0646\u0643 \u0641\u0642\u0637 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u064A\u062F\u0648\u064A\u0627\u064B \u0639\u0628\u0631 \u0644\u0648\u062D\u0629 \u0627\u0644\u0623\u0648\u0627\u0645\u0631.",
       fileWatcher: "\u0645\u0631\u0627\u0642\u0628\u0629 \u062A\u063A\u064A\u064A\u0631\u0627\u062A \u0627\u0644\u0645\u0644\u0641\u0627\u062A",
+      fileWatcherDesc: "\u0645\u0631\u0627\u0642\u0628\u0629 \u062A\u063A\u064A\u064A\u0631\u0627\u062A \u0627\u0644\u0645\u0644\u0641\u0627\u062A \u0627\u0644\u0645\u062D\u0644\u064A\u0629. \u0639\u0646\u062F\u0645\u0627 \u062A\u062A\u0648\u0642\u0641 \u0639\u0646 \u0627\u0644\u0643\u062A\u0627\u0628\u0629 \u0644\u062D\u0638\u0629\u060C \u064A\u062A\u0645 \u062F\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u062A\u0644\u0642\u0627\u0626\u064A\u0627\u064B \u0625\u0644\u0649 Feishu.",
       syncOnStartup: "\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0639\u0646\u062F \u0628\u062F\u0621 \u0627\u0644\u062A\u0634\u063A\u064A\u0644",
-      syncMode: "\u0648\u0636\u0639 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
-      off: "\u0625\u064A\u0642\u0627\u0641 (\u064A\u062F\u0648\u064A \u0641\u0642\u0637)",
+      syncOnStartupDesc: "\u062A\u0634\u063A\u064A\u0644 \u0645\u0632\u0627\u0645\u0646\u0629 \u0643\u0627\u0645\u0644\u0629 \u0641\u064A \u0627\u0644\u062E\u0644\u0641\u064A\u0629 \u062A\u0644\u0642\u0627\u0626\u064A\u0627\u064B \u0639\u0646\u062F \u0628\u062F\u0621 Obsidian.",
+      scheduleMode: "\u0648\u0636\u0639 \u0627\u0644\u062C\u062F\u0648\u0644\u0629",
+      off: "\u0645\u0639\u0637\u0644",
       interval: "\u0641\u0627\u0635\u0644 \u0632\u0645\u0646\u064A \u062B\u0627\u0628\u062A",
-      cron: "\u0645\u062C\u062F\u0648\u0644 (cron)",
+      scheduled: "\u0645\u062C\u062F\u0648\u0644",
       intervalMinutes: "\u0627\u0644\u0641\u0627\u0635\u0644 \u0627\u0644\u0632\u0645\u0646\u064A (\u062F\u0642\u0627\u0626\u0642)",
-      cronExpression: "\u062A\u0639\u0628\u064A\u0631 Cron",
-      cronHelp: '\u0627\u0644\u062A\u0646\u0633\u064A\u0642: \u062F\u0642\u064A\u0642\u0629 \u0633\u0627\u0639\u0629 \u064A\u0648\u0645-\u0634\u0647\u0631 \u0634\u0647\u0631 \u064A\u0648\u0645-\u0623\u0633\u0628\u0648\u0639. \u0645\u062B\u0627\u0644: "0 9 * * 1" = \u0627\u0644\u0627\u062B\u0646\u064A\u0646 9:00 \u0635\u0628\u0627\u062D\u0627\u064B.'
+      intervalWarning: "\u0644\u062A\u062C\u0646\u0628 \u062D\u062F\u0648\u062F \u0645\u0639\u062F\u0644 API\u060C \u0644\u0627 \u064A\u0645\u0643\u0646 \u0623\u0646 \u062A\u0642\u0644 \u0627\u0644\u0641\u062A\u0631\u0629 \u0639\u0646 15 \u062F\u0642\u064A\u0642\u0629.",
+      scheduleDays: "\u0623\u064A\u0627\u0645 \u0627\u0644\u0623\u0633\u0628\u0648\u0639",
+      scheduleTime: "\u0627\u0644\u0648\u0642\u062A",
+      scheduleAdd: "\u0625\u0636\u0627\u0641\u0629 \u0648\u0642\u062A",
+      scheduleMax: "3 \u0641\u062A\u0631\u0627\u062A \u0632\u0645\u0646\u064A\u0629 \u0643\u062D\u062F \u0623\u0642\u0635\u0649",
+      mon: "\u0625\u062B\u0646",
+      tue: "\u062B\u0644\u0627\u062B",
+      wed: "\u0623\u0631\u0628\u0639",
+      thu: "\u062E\u0645\u064A\u0633",
+      fri: "\u062C\u0645\u0639\u0629",
+      sat: "\u0633\u0628\u062A",
+      sun: "\u0623\u062D\u062F"
     },
     scope: {
       title: "\u0627\u0644\u0646\u0637\u0627\u0642 \u0648\u0627\u0644\u0627\u0633\u062A\u0631\u0627\u062A\u064A\u062C\u064A\u0629",
@@ -22457,11 +22590,12 @@ var STATUS_ICONS = {
 var DEFAULT_SETTINGS = {
   feishu: { appId: "", appSecret: "" },
   github: { token: "", owner: "", repo: "", branch: "main" },
-  enabled: true,
-  fileWatcherEnabled: true,
+  enabled: false,
+  fileWatcherEnabled: false,
   syncMode: "off",
   intervalMinutes: 30,
-  cronExpression: "0 9 * * 1",
+  scheduledDays: [1, 2, 3, 4, 5],
+  scheduledTimes: ["09:00", "18:00"],
   syncOnStartup: false,
   syncFolder: "",
   attachmentFolder: "attachments/feishu",
@@ -22485,6 +22619,7 @@ var FeishuGitHubSyncPlugin = class extends import_obsidian2.Plugin {
     this.paused = false;
     // Startup sync guard
     this.startupDone = false;
+    this.lastScheduledSync = "";
   }
   // ==================== Plugin Lifecycle ====================
   async onload() {
@@ -22648,8 +22783,9 @@ Next sync: ${nextSync}`;
     if (this.settings.syncMode === "interval") {
       return `every ${this.settings.intervalMinutes} min`;
     }
-    if (this.settings.syncMode === "cron") {
-      return this.settings.cronExpression || "weekly schedule";
+    if (this.settings.syncMode === "scheduled") {
+      const times = this.settings.scheduledTimes.join(", ");
+      return times || "scheduled";
     }
     return null;
   }
@@ -22666,13 +22802,13 @@ Next sync: ${nextSync}`;
           });
         }
       }, ms);
-    } else if (this.settings.syncMode === "cron") {
+    } else if (this.settings.syncMode === "scheduled") {
       this.schedulerTimer = window.setInterval(() => {
         if (!this.paused && this.settings.enabled) {
-          this.checkCronMatch();
+          this.checkScheduledMatch();
         }
       }, 60 * 1e3);
-      this.checkCronMatch();
+      this.checkScheduledMatch();
     }
   }
   stopScheduler() {
@@ -22681,30 +22817,22 @@ Next sync: ${nextSync}`;
       this.schedulerTimer = null;
     }
   }
-  checkCronMatch() {
-    const cron = this.settings.cronExpression || `0 ${this.settings.weeklySyncHour} * * ${this.settings.weeklySyncDay}`;
-    const parts = cron.trim().split(/\s+/);
-    if (parts.length < 5)
-      return;
+  checkScheduledMatch() {
     const now = /* @__PURE__ */ new Date();
-    const minute = now.getMinutes();
-    const hour = now.getHours();
-    const dayOfMonth = now.getDate();
-    const month = now.getMonth() + 1;
+    const minute = String(now.getMinutes()).padStart(2, "0");
+    const hour = String(now.getHours()).padStart(2, "0");
+    const timeStr = `${hour}:${minute}`;
     const dayOfWeek = now.getDay();
-    if (this.cronMatch(parts[0], minute) && this.cronMatch(parts[1], hour) && this.cronMatch(parts[2], dayOfMonth) && this.cronMatch(parts[3], month) && this.cronMatch(parts[4], dayOfWeek)) {
-      this.syncManager.syncAll().catch(() => {
-      });
-    }
-  }
-  cronMatch(pattern, value) {
-    if (pattern === "*")
-      return true;
-    if (pattern.startsWith("*/")) {
-      const step = parseInt(pattern.slice(2));
-      return step > 0 && value % step === 0;
-    }
-    return pattern.split(",").some((p) => parseInt(p) === value);
+    if (!this.settings.scheduledDays.includes(dayOfWeek))
+      return;
+    if (!this.settings.scheduledTimes.includes(timeStr))
+      return;
+    const syncKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${timeStr}`;
+    if (this.lastScheduledSync === syncKey)
+      return;
+    this.lastScheduledSync = syncKey;
+    this.syncManager.syncAll().catch(() => {
+    });
   }
   // ==================== Public Sync Methods ====================
   async syncAll() {
@@ -22879,17 +23007,29 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
       warnDiv.innerHTML = i18n.t("settings.auth.securityWarning");
     });
     this.renderSection(containerEl, i18n.t("settings.automation.title"), (section) => {
-      this.renderToggle(section, i18n.t("settings.automation.enableSync"), settings.enabled, (v) => {
+      this.renderToggle(section, i18n.t("settings.automation.masterToggle"), settings.enabled, (v) => {
         settings.enabled = v;
+        this.plugin.updateSettings(settings);
+        this.display();
       });
-      this.renderToggle(section, i18n.t("settings.automation.fileWatcher"), settings.fileWatcherEnabled, (v) => {
+      section.createEl("p", {
+        text: i18n.t("settings.automation.masterToggleDesc"),
+        attr: { style: "font-size: 11px; color: var(--text-muted); margin: -4px 0 12px 24px;" }
+      });
+      const isDisabled = !settings.enabled;
+      const disabledOpacity = isDisabled ? "0.4" : "1";
+      const disabledPtr = isDisabled ? "none" : "auto";
+      const fwWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      this.renderToggle(fwWrapper, i18n.t("settings.automation.fileWatcher"), settings.fileWatcherEnabled, (v) => {
         settings.fileWatcherEnabled = v;
       });
-      this.renderToggle(section, i18n.t("settings.automation.syncOnStartup"), settings.syncOnStartup, (v) => {
-        settings.syncOnStartup = v;
+      fwWrapper.createEl("p", {
+        text: i18n.t("settings.automation.fileWatcherDesc"),
+        attr: { style: "font-size: 11px; color: var(--text-muted); margin: -4px 0 12px 24px;" }
       });
-      const modeLabel = section.createEl("label");
-      modeLabel.createSpan({ text: i18n.t("settings.automation.syncMode") });
+      const scheduleWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      const modeLabel = scheduleWrapper.createEl("label");
+      modeLabel.createSpan({ text: i18n.t("settings.automation.scheduleMode") });
       const modeSelect = modeLabel.createEl("select");
       modeSelect.style.display = "block";
       modeSelect.style.marginTop = "4px";
@@ -22897,7 +23037,7 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
       const modes = [
         { value: "off", label: i18n.t("settings.automation.off") },
         { value: "interval", label: i18n.t("settings.automation.interval") },
-        { value: "cron", label: i18n.t("settings.automation.cron") }
+        { value: "scheduled", label: i18n.t("settings.automation.scheduled") }
       ];
       for (const m of modes) {
         const opt = modeSelect.createEl("option", { value: m.value });
@@ -22905,24 +23045,110 @@ var FeishuSyncSettingsTab = class extends import_obsidian2.PluginSettingTab {
         if (settings.syncMode === m.value)
           opt.selected = true;
       }
-      const intervalContainer = section.createEl("div");
+      const intervalContainer = scheduleWrapper.createDiv();
       intervalContainer.style.display = settings.syncMode === "interval" ? "block" : "none";
-      this.renderNumberInput(intervalContainer, i18n.t("settings.automation.intervalMinutes"), settings.intervalMinutes, 1, 1440, (v) => {
+      this.renderNumberInput(intervalContainer, i18n.t("settings.automation.intervalMinutes"), settings.intervalMinutes, 15, 1440, (v) => {
+        if (v < 15)
+          v = 15;
         settings.intervalMinutes = v;
       });
-      const cronContainer = section.createEl("div");
-      cronContainer.style.display = settings.syncMode === "cron" ? "block" : "none";
-      this.renderTextInput(cronContainer, i18n.t("settings.automation.cronExpression"), settings.cronExpression, "0 9 * * 1", (v) => {
-        settings.cronExpression = v;
+      const intervalWarn = intervalContainer.createEl("p", {
+        text: i18n.t("settings.automation.intervalWarning"),
+        attr: { style: "font-size: 11px; color: var(--text-warning); margin-top: -4px; display: none;" }
       });
-      cronContainer.createEl("p", {
-        text: i18n.t("settings.automation.cronHelp"),
-        attr: { style: "font-size: 11px; color: var(--text-faint); margin-top: 2px;" }
+      const intervalInput = intervalContainer.querySelector('input[type="number"]');
+      if (intervalInput) {
+        intervalInput.addEventListener("input", () => {
+          const val = parseInt(intervalInput.value);
+          intervalWarn.style.display = !intervalInput.value || val < 15 ? "block" : "none";
+          if (val < 15)
+            intervalInput.style.borderColor = "var(--background-modifier-error)";
+          else
+            intervalInput.style.borderColor = "";
+        });
+      }
+      const scheduledContainer = scheduleWrapper.createDiv();
+      scheduledContainer.style.display = settings.syncMode === "scheduled" ? "block" : "none";
+      const dayLabel = scheduledContainer.createEl("label");
+      dayLabel.createSpan({ text: i18n.t("settings.automation.scheduleDays") });
+      const dayGroup = dayLabel.createDiv({ attr: { style: "display:flex; gap:4px; margin:6px 0 10px; flex-wrap:wrap;" } });
+      const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const dayButtons = [];
+      dayKeys.forEach((key, idx) => {
+        const btn = dayGroup.createEl("button", {
+          text: i18n.t(`settings.automation.${key}`),
+          attr: {
+            style: `padding:4px 10px; border-radius:4px; border:1px solid var(--background-modifier-border);
+                    background:${settings.scheduledDays.includes(idx) ? "var(--interactive-accent)" : "var(--background-primary)"};
+                    color:${settings.scheduledDays.includes(idx) ? "var(--text-on-accent)" : "var(--text-normal)"};
+                    cursor:pointer; font-size:12px;`
+          }
+        });
+        btn.addEventListener("click", () => {
+          const i = dayButtons.indexOf(btn);
+          if (settings.scheduledDays.includes(i)) {
+            settings.scheduledDays = settings.scheduledDays.filter((d) => d !== i);
+          } else {
+            settings.scheduledDays = [...settings.scheduledDays, i].sort();
+          }
+          dayButtons.forEach((b, bi) => {
+            b.style.background = settings.scheduledDays.includes(bi) ? "var(--interactive-accent)" : "var(--background-primary)";
+            b.style.color = settings.scheduledDays.includes(bi) ? "var(--text-on-accent)" : "var(--text-normal)";
+          });
+        });
+        dayButtons.push(btn);
       });
+      const timeLabel = scheduledContainer.createEl("label");
+      timeLabel.createSpan({ text: i18n.t("settings.automation.scheduleTime") });
+      const timeList = timeLabel.createDiv({ attr: { style: "margin:6px 0 8px;" } });
+      const renderTimeEntries = () => {
+        timeList.empty();
+        settings.scheduledTimes.forEach((t, i) => {
+          const row = timeList.createDiv({ attr: { style: "display:flex; gap:6px; align-items:center; margin-bottom:4px;" } });
+          const timeInput = row.createEl("input", { type: "time", value: t });
+          timeInput.style.flex = "1";
+          timeInput.addEventListener("change", () => {
+            settings.scheduledTimes[i] = timeInput.value;
+          });
+          const delBtn = row.createEl("button", {
+            text: "\xD7",
+            attr: { style: "padding:2px 8px; border-radius:4px; border:1px solid var(--background-modifier-border); cursor:pointer; font-size:14px;" }
+          });
+          delBtn.addEventListener("click", () => {
+            settings.scheduledTimes = settings.scheduledTimes.filter((_, idx) => idx !== i);
+            renderTimeEntries();
+          });
+        });
+        if (settings.scheduledTimes.length < 3) {
+          const addRow = timeList.createDiv({ attr: { style: "margin-top:4px;" } });
+          const addBtn = addRow.createEl("button", {
+            text: `+ ${i18n.t("settings.automation.scheduleAdd")}`,
+            attr: { style: "padding:4px 12px; border-radius:4px; border:1px solid var(--background-modifier-border); cursor:pointer; font-size:12px;" }
+          });
+          addBtn.addEventListener("click", () => {
+            settings.scheduledTimes.push("12:00");
+            renderTimeEntries();
+          });
+        } else {
+          timeList.createEl("p", {
+            text: i18n.t("settings.automation.scheduleMax"),
+            attr: { style: "font-size:11px; color:var(--text-faint); margin:2px 0;" }
+          });
+        }
+      };
+      renderTimeEntries();
       modeSelect.addEventListener("change", () => {
         settings.syncMode = modeSelect.value;
         intervalContainer.style.display = settings.syncMode === "interval" ? "block" : "none";
-        cronContainer.style.display = settings.syncMode === "cron" ? "block" : "none";
+        scheduledContainer.style.display = settings.syncMode === "scheduled" ? "block" : "none";
+      });
+      const startupWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      this.renderToggle(startupWrapper, i18n.t("settings.automation.syncOnStartup"), settings.syncOnStartup, (v) => {
+        settings.syncOnStartup = v;
+      });
+      startupWrapper.createEl("p", {
+        text: i18n.t("settings.automation.syncOnStartupDesc"),
+        attr: { style: "font-size: 11px; color: var(--text-muted); margin: -4px 0 0 24px;" }
       });
     });
     this.renderSection(containerEl, i18n.t("settings.scope.title"), (section) => {

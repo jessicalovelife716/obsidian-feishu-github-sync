@@ -89,11 +89,12 @@ const STATUS_ICONS = {
 const DEFAULT_SETTINGS: SyncSettings = {
   feishu: { appId: '', appSecret: '' },
   github: { token: '', owner: '', repo: '', branch: 'main' },
-  enabled: true,
-  fileWatcherEnabled: true,
+  enabled: false,
+  fileWatcherEnabled: false,
   syncMode: 'off',
   intervalMinutes: 30,
-  cronExpression: '0 9 * * 1',
+  scheduledDays: [1, 2, 3, 4, 5],
+  scheduledTimes: ['09:00', '18:00'],
   syncOnStartup: false,
   syncFolder: '',
   attachmentFolder: 'attachments/feishu',
@@ -337,8 +338,9 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
       return `every ${this.settings.intervalMinutes} min`;
     }
 
-    if (this.settings.syncMode === 'cron') {
-      return this.settings.cronExpression || 'weekly schedule';
+    if (this.settings.syncMode === 'scheduled') {
+      const times = this.settings.scheduledTimes.join(', ');
+      return times || 'scheduled';
     }
 
     return null;
@@ -358,16 +360,16 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
           this.syncManager.syncAll().catch(() => {});
         }
       }, ms);
-    } else if (this.settings.syncMode === 'cron') {
-      // Check every minute for cron match
+    } else if (this.settings.syncMode === 'scheduled') {
+      // Check every minute for scheduled time match
       this.schedulerTimer = window.setInterval(() => {
         if (!this.paused && this.settings.enabled) {
-          this.checkCronMatch();
+          this.checkScheduledMatch();
         }
       }, 60 * 1000);
 
       // Also check immediately
-      this.checkCronMatch();
+      this.checkScheduledMatch();
     }
   }
 
@@ -378,37 +380,27 @@ export default class FeishuGitHubSyncPlugin extends Plugin {
     }
   }
 
-  private checkCronMatch(): void {
-    const cron = this.settings.cronExpression || `0 ${this.settings.weeklySyncHour} * * ${this.settings.weeklySyncDay}`;
-    const parts = cron.trim().split(/\s+/);
-    if (parts.length < 5) return;
+  private lastScheduledSync = '';
 
+  private checkScheduledMatch(): void {
     const now = new Date();
-    const minute = now.getMinutes();
-    const hour = now.getHours();
-    const dayOfMonth = now.getDate();
-    const month = now.getMonth() + 1;
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const hour = String(now.getHours()).padStart(2, '0');
+    const timeStr = `${hour}:${minute}`;
     const dayOfWeek = now.getDay();
 
-    if (
-      this.cronMatch(parts[0], minute) &&
-      this.cronMatch(parts[1], hour) &&
-      this.cronMatch(parts[2], dayOfMonth) &&
-      this.cronMatch(parts[3], month) &&
-      this.cronMatch(parts[4], dayOfWeek)
-    ) {
-      this.syncManager.syncAll().catch(() => {});
-    }
-  }
+    // Check if today is a scheduled day
+    if (!this.settings.scheduledDays.includes(dayOfWeek)) return;
 
-  private cronMatch(pattern: string, value: number): boolean {
-    if (pattern === '*') return true;
-    if (pattern.startsWith('*/')) {
-      const step = parseInt(pattern.slice(2));
-      return step > 0 && value % step === 0;
-    }
-    // Handle comma-separated values
-    return pattern.split(',').some((p) => parseInt(p) === value);
+    // Check if current time matches any scheduled time
+    if (!this.settings.scheduledTimes.includes(timeStr)) return;
+
+    // Dedup: ensure we only fire once per time per day
+    const syncKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${timeStr}`;
+    if (this.lastScheduledSync === syncKey) return;
+    this.lastScheduledSync = syncKey;
+
+    this.syncManager.syncAll().catch(() => {});
   }
 
   // ==================== Public Sync Methods ====================
@@ -635,19 +627,35 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
     // 2. Automation & Schedule
     // ========================
     this.renderSection(containerEl, i18n.t('settings.automation.title'), (section) => {
-      this.renderToggle(section, i18n.t('settings.automation.enableSync'), settings.enabled, (v) => {
+      // ---- Master Toggle ----
+      this.renderToggle(section, i18n.t('settings.automation.masterToggle'), settings.enabled, (v) => {
         settings.enabled = v;
+        this.plugin.updateSettings(settings);
+        this.display();
       });
-      this.renderToggle(section, i18n.t('settings.automation.fileWatcher'), settings.fileWatcherEnabled, (v) => {
-        settings.fileWatcherEnabled = v;
-      });
-      this.renderToggle(section, i18n.t('settings.automation.syncOnStartup'), settings.syncOnStartup, (v) => {
-        settings.syncOnStartup = v;
+      section.createEl('p', {
+        text: i18n.t('settings.automation.masterToggleDesc'),
+        attr: { style: 'font-size: 11px; color: var(--text-muted); margin: -4px 0 12px 24px;' },
       });
 
-      // Sync mode dropdown
-      const modeLabel = section.createEl('label');
-      modeLabel.createSpan({ text: i18n.t('settings.automation.syncMode') });
+      const isDisabled = !settings.enabled;
+      const disabledOpacity = isDisabled ? '0.4' : '1';
+      const disabledPtr = isDisabled ? 'none' : 'auto';
+
+      // ---- File Watcher ----
+      const fwWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      this.renderToggle(fwWrapper, i18n.t('settings.automation.fileWatcher'), settings.fileWatcherEnabled, (v) => {
+        settings.fileWatcherEnabled = v;
+      });
+      fwWrapper.createEl('p', {
+        text: i18n.t('settings.automation.fileWatcherDesc'),
+        attr: { style: 'font-size: 11px; color: var(--text-muted); margin: -4px 0 12px 24px;' },
+      });
+
+      // ---- Schedule Mode ----
+      const scheduleWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      const modeLabel = scheduleWrapper.createEl('label');
+      modeLabel.createSpan({ text: i18n.t('settings.automation.scheduleMode') });
       const modeSelect = modeLabel.createEl('select');
       modeSelect.style.display = 'block';
       modeSelect.style.marginTop = '4px';
@@ -656,7 +664,7 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
       const modes: { value: SyncMode; label: string }[] = [
         { value: 'off', label: i18n.t('settings.automation.off') },
         { value: 'interval', label: i18n.t('settings.automation.interval') },
-        { value: 'cron', label: i18n.t('settings.automation.cron') },
+        { value: 'scheduled', label: i18n.t('settings.automation.scheduled') },
       ];
 
       for (const m of modes) {
@@ -665,29 +673,124 @@ class FeishuSyncSettingsTab extends PluginSettingTab {
         if (settings.syncMode === m.value) opt.selected = true;
       }
 
-      // Interval input (shown only when interval mode)
-      const intervalContainer = section.createEl('div');
+      // ---- Interval Settings ----
+      const intervalContainer = scheduleWrapper.createDiv();
       intervalContainer.style.display = settings.syncMode === 'interval' ? 'block' : 'none';
-      this.renderNumberInput(intervalContainer, i18n.t('settings.automation.intervalMinutes'), settings.intervalMinutes, 1, 1440, (v) => {
+      this.renderNumberInput(intervalContainer, i18n.t('settings.automation.intervalMinutes'), settings.intervalMinutes, 15, 1440, (v) => {
+        if (v < 15) v = 15;
         settings.intervalMinutes = v;
       });
-
-      // Cron input (shown only when cron mode)
-      const cronContainer = section.createEl('div');
-      cronContainer.style.display = settings.syncMode === 'cron' ? 'block' : 'none';
-
-      this.renderTextInput(cronContainer, i18n.t('settings.automation.cronExpression'), settings.cronExpression, '0 9 * * 1', (v) => {
-        settings.cronExpression = v;
+      // Validation warning
+      const intervalWarn = intervalContainer.createEl('p', {
+        text: i18n.t('settings.automation.intervalWarning'),
+        attr: { style: 'font-size: 11px; color: var(--text-warning); margin-top: -4px; display: none;' },
       });
-      cronContainer.createEl('p', {
-        text: i18n.t('settings.automation.cronHelp'),
-        attr: { style: 'font-size: 11px; color: var(--text-faint); margin-top: 2px;' },
+      const intervalInput = intervalContainer.querySelector('input[type="number"]') as HTMLInputElement;
+      if (intervalInput) {
+        intervalInput.addEventListener('input', () => {
+          const val = parseInt(intervalInput.value);
+          intervalWarn.style.display = (!intervalInput.value || val < 15) ? 'block' : 'none';
+          if (val < 15) intervalInput.style.borderColor = 'var(--background-modifier-error)';
+          else intervalInput.style.borderColor = '';
+        });
+      }
+
+      // ---- Scheduled Time Settings ----
+      const scheduledContainer = scheduleWrapper.createDiv();
+      scheduledContainer.style.display = settings.syncMode === 'scheduled' ? 'block' : 'none';
+
+      // Day-of-week buttons
+      const dayLabel = scheduledContainer.createEl('label');
+      dayLabel.createSpan({ text: i18n.t('settings.automation.scheduleDays') });
+      const dayGroup = dayLabel.createDiv({ attr: { style: 'display:flex; gap:4px; margin:6px 0 10px; flex-wrap:wrap;' } });
+      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const dayButtons: HTMLButtonElement[] = [];
+
+      dayKeys.forEach((key, idx) => {
+        const btn = dayGroup.createEl('button', {
+          text: i18n.t(`settings.automation.${key}`),
+          attr: {
+            style: `padding:4px 10px; border-radius:4px; border:1px solid var(--background-modifier-border);
+                    background:${settings.scheduledDays.includes(idx) ? 'var(--interactive-accent)' : 'var(--background-primary)'};
+                    color:${settings.scheduledDays.includes(idx) ? 'var(--text-on-accent)' : 'var(--text-normal)'};
+                    cursor:pointer; font-size:12px;`,
+          },
+        });
+        btn.addEventListener('click', () => {
+          const i = dayButtons.indexOf(btn);
+          if (settings.scheduledDays.includes(i)) {
+            settings.scheduledDays = settings.scheduledDays.filter((d) => d !== i);
+          } else {
+            settings.scheduledDays = [...settings.scheduledDays, i].sort();
+          }
+          // Re-render buttons
+          dayButtons.forEach((b, bi) => {
+            b.style.background = settings.scheduledDays.includes(bi) ? 'var(--interactive-accent)' : 'var(--background-primary)';
+            b.style.color = settings.scheduledDays.includes(bi) ? 'var(--text-on-accent)' : 'var(--text-normal)';
+          });
+        });
+        dayButtons.push(btn);
       });
 
+      // Time picker entries
+      const timeLabel = scheduledContainer.createEl('label');
+      timeLabel.createSpan({ text: i18n.t('settings.automation.scheduleTime') });
+      const timeList = timeLabel.createDiv({ attr: { style: 'margin:6px 0 8px;' } });
+
+      const renderTimeEntries = () => {
+        timeList.empty();
+        settings.scheduledTimes.forEach((t, i) => {
+          const row = timeList.createDiv({ attr: { style: 'display:flex; gap:6px; align-items:center; margin-bottom:4px;' } });
+          const timeInput = row.createEl('input', { type: 'time', value: t });
+          timeInput.style.flex = '1';
+          timeInput.addEventListener('change', () => {
+            settings.scheduledTimes[i] = timeInput.value;
+          });
+          const delBtn = row.createEl('button', {
+            text: '×',
+            attr: { style: 'padding:2px 8px; border-radius:4px; border:1px solid var(--background-modifier-border); cursor:pointer; font-size:14px;' },
+          });
+          delBtn.addEventListener('click', () => {
+            settings.scheduledTimes = settings.scheduledTimes.filter((_, idx) => idx !== i);
+            renderTimeEntries();
+          });
+        });
+
+        // Add button
+        if (settings.scheduledTimes.length < 3) {
+          const addRow = timeList.createDiv({ attr: { style: 'margin-top:4px;' } });
+          const addBtn = addRow.createEl('button', {
+            text: `+ ${i18n.t('settings.automation.scheduleAdd')}`,
+            attr: { style: 'padding:4px 12px; border-radius:4px; border:1px solid var(--background-modifier-border); cursor:pointer; font-size:12px;' },
+          });
+          addBtn.addEventListener('click', () => {
+            settings.scheduledTimes.push('12:00');
+            renderTimeEntries();
+          });
+        } else {
+          timeList.createEl('p', {
+            text: i18n.t('settings.automation.scheduleMax'),
+            attr: { style: 'font-size:11px; color:var(--text-faint); margin:2px 0;' },
+          });
+        }
+      };
+      renderTimeEntries();
+
+      // Toggle sub-sections on mode change
       modeSelect.addEventListener('change', () => {
         settings.syncMode = modeSelect.value as SyncMode;
         intervalContainer.style.display = settings.syncMode === 'interval' ? 'block' : 'none';
-        cronContainer.style.display = settings.syncMode === 'cron' ? 'block' : 'none';
+        scheduledContainer.style.display = settings.syncMode === 'scheduled' ? 'block' : 'none';
+      });
+
+      // ---- Sync on Startup ----
+      const startupWrapper = section.createDiv({ attr: { style: `opacity:${disabledOpacity}; pointer-events:${disabledPtr};` } });
+      this.renderToggle(startupWrapper, i18n.t('settings.automation.syncOnStartup'), settings.syncOnStartup, (v) => {
+        settings.syncOnStartup = v;
+      });
+      startupWrapper.createEl('p', {
+        text: i18n.t('settings.automation.syncOnStartupDesc'),
+        attr: { style: 'font-size: 11px; color: var(--text-muted); margin: -4px 0 0 24px;' },
       });
     });
 

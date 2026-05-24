@@ -25,7 +25,7 @@ export class SyncManager {
 
   // File watcher debounce
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
-  private readonly DEBOUNCE_MS = 3000;
+  private readonly DEBOUNCE_MS = 5000;
   private watcherSuspended = false;
 
   // Callbacks for main.ts
@@ -120,7 +120,7 @@ export class SyncManager {
     // Set new debounce timer (3s)
     const timer = setTimeout(() => {
       this.debounceTimers.delete(file.path);
-      this.syncSingleFile(file).catch(console.error);
+      this.syncFileToFeishu(file).catch(console.error);
     }, this.DEBOUNCE_MS);
 
     this.debounceTimers.set(file.path, timer);
@@ -434,6 +434,36 @@ export class SyncManager {
       }
     } catch (error) {
       console.error(`Failed to sync ${file.path}:`, error);
+    }
+  }
+
+  /** File-watcher triggered: only push to Feishu, skip git entirely. */
+  async syncFileToFeishu(file: TFile): Promise<void> {
+    if (this._syncLock) return;
+    if (!this.settings.fileWatcherEnabled) return;
+    if (!this.shouldSyncFile(file.path)) return;
+
+    try {
+      const content = await this.app.vault.read(file);
+      const title = this.extractTitle(content, file.basename);
+      const plainContent = this.stripFrontmatter(content);
+
+      const mapping = this.mappings.get(file.path);
+
+      if (mapping?.feishuDocId) {
+        await this.feishu.updateDocument(mapping.feishuDocId, plainContent, title);
+      } else {
+        const existingDoc = await this.feishu.findDocumentByTitle(title);
+        if (existingDoc) {
+          await this.feishu.updateDocument(existingDoc.docId, plainContent, title);
+          this.updateMapping(file.path, existingDoc.docId);
+        } else {
+          const newDocId = await this.feishu.createDocument(title, plainContent);
+          this.updateMapping(file.path, newDocId);
+        }
+      }
+    } catch (error) {
+      console.error(`[FileWatcher] Failed to sync ${file.path}:`, error);
     }
   }
 
